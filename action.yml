@@ -25,7 +25,7 @@ runs:
       run: |
         set -e
 
-        echo "Detecting existing PowerShell on Linux…"
+        echo "Detecting existing PowerShell on Linux..."
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
         echo "Detected version: ${DETECTED_VERSION:-<none>}"
         echo "Requested version: $REQUESTED_VERSION"
@@ -49,30 +49,30 @@ runs:
         # Debian/Ubuntu installation
         # -------------------------------------------------------------------------------------------------
         if command -v apt-get >/dev/null; then
-          echo "Using APT package manager (Debian/Ubuntu)…"
+          echo "Using APT package manager (Debian/Ubuntu)..."
 
-          echo "Ensuring Microsoft package repo is configured…"
+          echo "Ensuring Microsoft package repo is configured..."
           if ! grep -q "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
             wget -qO- https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
             DIST_CODENAME=$(lsb_release -cs)
             sudo add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://packages.microsoft.com/ubuntu/$DIST_CODENAME/prod $DIST_CODENAME main"
           fi
 
-          echo "Updating package index…"
+          echo "Updating package index..."
           sudo apt-get update -y
 
           if [[ "$DECISION" != "install" ]]; then
-            echo "Removing any existing PowerShell packages…"
+            echo "Removing any existing PowerShell packages..."
             sudo apt-get remove -y powershell || true
             sudo apt-get autoremove -y || true
           fi
 
-          echo "Attempting to install exact version $REQUESTED_VERSION from repo…"
+          echo "Attempting to install exact version $REQUESTED_VERSION from repo..."
           EXACT_PKG=$(apt-cache madison powershell | awk '{print $3}' | grep -E "^${REQUESTED_VERSION}(-|$)" | head -n1 || true)
           if [[ -n "$EXACT_PKG" ]]; then
             sudo apt-get install -y powershell=$EXACT_PKG
           else
-            echo "Exact version not found in repo; downloading .deb package from GitHub release…"
+            echo "Exact version not found in repo; downloading .deb package from GitHub release..."
             ARCH=$(dpkg --print-architecture)
             DEB_NAME="powershell_${REQUESTED_VERSION}-1.deb_${ARCH}.deb"
             URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
@@ -95,7 +95,7 @@ runs:
       run: |
         set -e
 
-        echo "Detecting existing PowerShell on macOS…"
+        echo "Detecting existing PowerShell on macOS..."
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
         echo "Detected version: ${DETECTED_VERSION:-<none>}"
         echo "Requested version: $REQUESTED_VERSION"
@@ -113,14 +113,14 @@ runs:
         if [[ "$DECISION" == "skip" ]]; then
           echo "Skipping installation on macOS (exact version present)."
         else
-          echo "Uninstalling any existing PowerShell…"
+          echo "Uninstalling any existing PowerShell..."
           brew uninstall --ignore-dependencies --force powershell || true
 
-          echo "Attempting to install PowerShell $REQUESTED_VERSION via Homebrew…"
+          echo "Attempting to install PowerShell $REQUESTED_VERSION via Homebrew..."
           if brew info --cask powershell@$REQUESTED_VERSION >/dev/null 2>&1; then
             brew install --cask powershell@$REQUESTED_VERSION
           else
-            echo "Exact version not available via Homebrew; downloading .pkg from GitHub release…"
+            echo "Exact version not available via Homebrew; downloading .pkg from GitHub release..."
             ARCH=$(uname -m)
             if [[ "$ARCH" == "arm64" ]]; then PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg"; else PKG_NAME="powershell-${REQUESTED_VERSION}-osx-x64.pkg"; fi
             URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
@@ -137,7 +137,7 @@ runs:
         REINSTALL: ${{ inputs.Reinstall }}
       shell: powershell
       run: |
-        Write-Host "Detecting existing PowerShell on Windows…"
+        Write-Host "Detecting existing PowerShell on Windows..."
         try {
           $detected = (& pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
         } catch {
@@ -165,14 +165,14 @@ runs:
         if ($decision -eq 'skip') {
           Write-Host 'Skipping installation on Windows (exact version present).'
         } else {
-          Write-Host 'Removing existing PowerShell installation (if any)…'
+          Write-Host 'Removing existing PowerShell installation (if any)...'
           $pwshProducts = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -like 'PowerShell*' }
           foreach ($p in $pwshProducts) {
-            Write-Host "Uninstalling $($p.Name)…"
+            Write-Host "Uninstalling $($p.Name)..."
             Start-Process msiexec.exe -ArgumentList '/x', $p.IdentifyingNumber, '/quiet', '/norestart' -Wait
           }
 
-          Write-Host "Installing PowerShell $env:REQUESTED_VERSION…"
+          Write-Host "Installing PowerShell $env:REQUESTED_VERSION..."
           $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
           $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
           Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
