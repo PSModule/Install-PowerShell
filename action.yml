@@ -85,8 +85,8 @@ runs:
         lower_req="$(printf '%s' "$REQUESTED_VERSION" | tr '[:upper:]' '[:lower:]')"
         if [[ -z "$REQUESTED_VERSION" || "$lower_req" == "latest" || "$lower_req" == "null" ]]; then
           REQUESTED_VERSION=$(
-            curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest \
-              | grep -oP '"tag_name":\s*"\K([^"]+)' | sed 's/^v//'
+            curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+            grep '"tag_name"' | head -n1 | sed -E 's/.*"v?([^"]+)".*/\1/'
           )
           echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
         fi
