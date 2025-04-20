@@ -1,7 +1,5 @@
 name: Install PowerShell
-description: |
-  Install a specific version of PowerShell Core on any GitHub runner (Linux, macOS, Windows).
-  Handles install, downgrade, or forced reinstall.
+description: Install a specific version of PowerShell Core on any GitHub runner (Linux, macOS, Windows). Handles install, downgrade, or forced reinstall.
 author: PSModule
 branding:
   icon: terminal
@@ -66,6 +64,7 @@ runs:
       shell: bash
       run: |
         set -e
+
         echo "Detecting existing PowerShell on macOS…"
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
         echo "Detected version: ${DETECTED_VERSION:-<none>}"
@@ -105,15 +104,29 @@ runs:
       shell: powershell
       run: |
         Write-Host "Detecting existing PowerShell on Windows…"
-        try { $detected = (pwsh -NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.ToString()") } catch { $detected = $null }
-        Write-Host "Detected version: $($detected ?? '<none>')"
+        try {
+          $detected = (pwsh -NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.ToString()")
+        } catch {
+          $detected = $null
+        }
+
+        if ($null -eq $detected -or $detected -eq '') {
+          $detectedDisplay = '<none>'
+        } else {
+          $detectedDisplay = $detected
+        }
+        Write-Host "Detected version: $detectedDisplay"
         Write-Host "Requested version: $env:REQUESTED_VERSION"
         Write-Host "Reinstall flag: $env:REINSTALL"
 
         if (-not $detected) {
           $decision = 'install'
         } elseif ($detected -eq $env:REQUESTED_VERSION) {
-          $decision = ($env:REINSTALL -eq 'true') ? 'reinstall' : 'skip'
+          if ($env:REINSTALL -eq 'true') {
+            $decision = 'reinstall'
+          } else {
+            $decision = 'skip'
+          }
         } else {
           $decision = 'uninstall-install'
         }
@@ -121,13 +134,12 @@ runs:
 
         if ($decision -eq 'skip') {
           Write-Host 'Skipping installation on Windows (exact version present).'
-        }
-        else {
+        } else {
           Write-Host 'Uninstalling any existing PowerShell…'
           winget uninstall --id Microsoft.PowerShell -e --silent | Out-Null
           Write-Host "Installing PowerShell $env:REQUESTED_VERSION…"
           $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
           $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
           Invoke-WebRequest $url -OutFile $msi
-          Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
+          Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
         }
