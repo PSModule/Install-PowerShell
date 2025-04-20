@@ -1,228 +1,173 @@
-name: Install-PowerShell
-description: Install PowerShell
-author: PSModule
+name: "Install PowerShell"
+description: "Install a specific version of PowerShell Core on any GitHub runner (Linux, macOS, Windows). Handles install, downgrade, or forced reinstall with uniform logging."
+author: "Your Org"
 branding:
-  icon: upload-cloud
-  color: white
+  icon: "terminal"
+  color: "purple"
 
 inputs:
-  Version:
-    description: The version of PowerShell to install, e.g., 7.4.0 or 7.5.0. If not provided, the latest version is installed.
-    default: ''
+  version:
+    description: "Exact PowerShell version to install (e.g. 7.4.1)"
+    required: true
+  reinstall:
+    description: "Set to 'true' to uninstall & reinstall even when the exact version is already present."
+    default: "false"
+  package-source:
+    description: "Package source: 'microsoft' (default), 'github', or custom direct URL to the archive/MSI."
+    default: "microsoft"
 
 runs:
-  using: composite
+  using: "composite"
   steps:
-    - name: Install PowerShell on Windows
+    # ---------------------------------------------------------------------
+    # Common environment
+    # ---------------------------------------------------------------------
+    - name: Set shared env
+      shell: bash
+      run: |
+        echo "REQUESTED_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+        echo "REINSTALL=${{ inputs.reinstall }}" >> $GITHUB_ENV
+        echo "PACKAGE_SOURCE=${{ inputs['package-source'] }}" >> $GITHUB_ENV
+
+    # ---------------------------------------------------------------------
+    # Linux installer ------------------------------------------------------
+    # ---------------------------------------------------------------------
+    - name: Install PowerShell (Linux)
+      if: runner.os == 'Linux'
+      id: linux
+      shell: bash
+      run: |
+        set -e
+        log() { echo "::notice title=pwsh-installer::[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $1"; }
+
+        log "Detecting existing PowerShell on Linux…"
+        DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        log "Detected version: ${DETECTED_VERSION:-<none>}"
+        log "Requested version: $REQUESTED_VERSION"
+        log "Reinstall flag: $REINSTALL"
+
+        if [[ -z "$DETECTED_VERSION" ]]; then
+          DECISION="install"
+        elif [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
+          if [[ "$REINSTALL" == "true" ]]; then DECISION="reinstall"; else DECISION="skip"; fi
+        else
+          DECISION="uninstall-install"  # covers downgrade or upgrade
+        fi
+        log "Decision: $DECISION"
+
+        if [[ "$DECISION" == "skip" ]]; then
+          log "Skipping installation on Linux (exact version present)."
+        else
+          log "Uninstalling any existing PowerShell…"
+          sudo rm -rf /usr/local/microsoft/powershell || true
+          sudo rm -f /usr/local/bin/pwsh || true
+          log "Installing PowerShell $REQUESTED_VERSION…"
+          curl -sSL https://aka.ms/install-powershell.sh | sudo bash -s -- -Version "$REQUESTED_VERSION" -Destination /usr/local
+        fi
+
+        PWSH_PATH=$(command -v pwsh)
+        echo "PWSH_PATH=$PWSH_PATH" >> $GITHUB_ENV
+        echo "PWSH_VERSION=$REQUESTED_VERSION" >> $GITHUB_ENV
+        echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
+        echo "pwsh-version=$REQUESTED_VERSION" >> $GITHUB_OUTPUT
+
+    # ---------------------------------------------------------------------
+    # macOS installer ------------------------------------------------------
+    # ---------------------------------------------------------------------
+    - name: Install PowerShell (macOS)
+      if: runner.os == 'macOS'
+      id: macos
+      shell: bash
+      run: |
+        set -e
+        log() { echo "::notice title=pwsh-installer::[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $1"; }
+
+        log "Detecting existing PowerShell on macOS…"
+        DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        log "Detected version: ${DETECTED_VERSION:-<none>}"
+        log "Requested version: $REQUESTED_VERSION"
+        log "Reinstall flag: $REINSTALL"
+
+        if [[ -z "$DETECTED_VERSION" ]]; then
+          DECISION="install"
+        elif [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
+          if [[ "$REINSTALL" == "true" ]]; then DECISION="reinstall"; else DECISION="skip"; fi
+        else
+          DECISION="uninstall-install"
+        fi
+        log "Decision: $DECISION"
+
+        if [[ "$DECISION" == "skip" ]]; then
+          log "Skipping installation on macOS (exact version present)."
+        else
+          log "Uninstalling any existing PowerShell…"
+          sudo rm -rf /usr/local/microsoft/powershell || true
+          sudo rm -f /usr/local/bin/pwsh || true
+          log "Installing PowerShell $REQUESTED_VERSION…"
+          curl -sSL https://aka.ms/install-powershell.sh | sudo bash -s -- -Version "$REQUESTED_VERSION" -Destination /usr/local
+        fi
+
+        PWSH_PATH=$(command -v pwsh)
+        echo "PWSH_PATH=$PWSH_PATH" >> $GITHUB_ENV
+        echo "PWSH_VERSION=$REQUESTED_VERSION" >> $GITHUB_ENV
+        echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
+        echo "pwsh-version=$REQUESTED_VERSION" >> $GITHUB_OUTPUT
+
+    # ---------------------------------------------------------------------
+    # Windows installer ----------------------------------------------------
+    # ---------------------------------------------------------------------
+    - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
+      id: windows
       shell: powershell
       run: |
-        $version = '${{ inputs.Version }}'
+        function Log($Message) {
+          Write-Host "::notice title=pwsh-installer::[$([DateTime]::UtcNow.ToString('u'))] $Message"
+        }
 
-        # Get version to install
-        if ([string]::IsNullOrWhiteSpace($version)) {
-          $releaseInfo = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
-          $version = $releaseInfo.tag_name.Trim('v')
-          Write-Host "Latest PowerShell version: $version"
+        Log "Detecting existing PowerShell on Windows…"
+        try { $detected = (pwsh -NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.ToString()") } catch { $detected = $null }
+        Log "Detected version: $($detected ?? '<none>')"
+        Log "Requested version: $env:REQUESTED_VERSION"
+        Log "Reinstall flag: $env:REINSTALL"
+
+        if (-not $detected) {
+          $decision = 'install'
+        } elseif ($detected -eq $env:REQUESTED_VERSION) {
+          $decision = ($env:REINSTALL -eq 'true') ? 'reinstall' : 'skip'
         } else {
-          $version = $version.TrimStart('v')
-          Write-Host "Installing specified PowerShell version: $version"
+          $decision = 'uninstall-install'
+        }
+        Log "Decision: $decision"
+
+        if ($decision -eq 'skip') {
+          Log 'Skipping installation on Windows (exact version present).'
+        }
+        else {
+          Log 'Uninstalling any existing PowerShell…'
+          winget uninstall --id Microsoft.PowerShell -e --silent | Out-Null
+          Log "Installing PowerShell $env:REQUESTED_VERSION…"
+          $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
+          $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
+          Invoke-WebRequest $url -OutFile $msi
+          Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
         }
 
-        # Function to compare versions
-        function Compare-Versions {
-          param(
-            [string]$CurrentVersion,
-            [string]$TargetVersion
-          )
+        $pwshPath = (Get-Command pwsh).Source
+        echo "PWSH_PATH=$pwshPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "PWSH_VERSION=$($env:REQUESTED_VERSION)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "pwsh-path=$pwshPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        echo "pwsh-version=$($env:REQUESTED_VERSION)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-          $currentParts = $CurrentVersion.Split('.') + @(0,0,0)
-          $targetParts = $TargetVersion.Split('.') + @(0,0,0)
-
-          for ($i = 0; $i -lt 3; $i++) {
-            $currentPart = [int]$currentParts[$i]
-            $targetPart = [int]$targetParts[$i]
-
-            if ($currentPart -lt $targetPart) { return -1 }
-            if ($currentPart -gt $targetPart) { return 1 }
-          }
-          return 0
-        }
-
-        # Check existing installation
-        $needToInstall = $true
-        try {
-          if (Get-Command pwsh -ErrorAction SilentlyContinue) {
-            $currentVersion = & pwsh -Command '$PSVersionTable.PSVersion.ToString()'
-            Write-Host "Current PowerShell version: $currentVersion"
-
-            $comparison = Compare-Versions -CurrentVersion $currentVersion -TargetVersion $version
-            if ($comparison -ge 0) {
-              Write-Host "Current version meets or exceeds target version. Skipping installation."
-              $needToInstall = $false
-            } else {
-              Write-Host "Current version is lower than target version. Will upgrade."
-            }
-          }
-        } catch {
-          Write-Host "Error checking current version: $_"
-        }
-
-        if ($needToInstall) {
-          try {
-            $msiName = "PowerShell-$version-win-x64.msi"
-            $downloadUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$version/$msiName"
-
-            Write-Host "Downloading from $downloadUrl"
-            Invoke-WebRequest -Uri $downloadUrl -OutFile $msiName -ErrorAction Stop
-
-            Write-Host "Installing PowerShell $version"
-            Start-Process msiexec.exe -ArgumentList "/i", $msiName, "/quiet", "/norestart" -Wait -ErrorAction Stop
-
-            if (Test-Path "$env:ProgramFiles\PowerShell\7\pwsh.exe") {
-              Write-Host "Installation successful"
-              & "$env:ProgramFiles\PowerShell\7\pwsh.exe" -Command '$PSVersionTable'
-            } else {
-              throw "Installation failed - pwsh.exe not found"
-            }
-          } catch {
-            Write-Error "Installation failed: $_"
-            exit 1
-          }
-        }
-
-    - name: Install PowerShell on Ubuntu
-      if: runner.os == 'Linux'
+    # ---------------------------------------------------------------------
+    # Aggregate outputs ----------------------------------------------------
+    # ---------------------------------------------------------------------
+    - name: Export composite outputs
+      id: export
       shell: bash
       run: |
-        version='${{ inputs.Version }}'
-
-        # Version comparison functions
-        get_version_parts() {
-          local version=${1#v}
-          IFS='.' read -ra parts <<< "$version"
-          echo "${parts[0]:-0} ${parts[1]:-0} ${parts[2]:-0}"
-        }
-
-        compare_versions() {
-          local current_parts=($(get_version_parts "$1"))
-          local target_parts=($(get_version_parts "$2"))
-
-          for i in {0..2}; do
-            if (( current_parts[i] < target_parts[i] )); then return 1; fi
-            if (( current_parts[i] > target_parts[i] )); then return 2; fi
-          done
-          return 0
-        }
-
-        # Get version if not specified
-        if [ -z "$version" ]; then
-          version=$(curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep 'tag_name' | cut -d '"' -f 4)
-          echo "Latest PowerShell version: $version"
-        fi
-
-        clean_version=${version#v}
-        echo "Installing PowerShell version: $clean_version"
-
-        # Check existing installation
-        need_to_install=true
-        if command -v pwsh &> /dev/null; then
-          current_version=$(pwsh -c '$PSVersionTable.PSVersion.ToString()' | tr -d '\r\n')
-          echo "Current PowerShell version: $current_version"
-
-          compare_versions "$current_version" "$clean_version"
-          case $? in
-            0) echo "Versions equal - skipping install"; need_to_install=false ;;
-            2) echo "Current version higher - skipping install"; need_to_install=false ;;
-            1) echo "Current version lower - will upgrade" ;;
-          esac
-        fi
-
-        if [ "$need_to_install" = true ]; then
-          sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https
-
-          # Try multiple package formats
-          pkg_found=false
-          for pkg in "powershell_${clean_version}-1.deb_amd64.deb" "powershell-${clean_version}-linux-x64.deb"; do
-            if wget "https://github.com/PowerShell/PowerShell/releases/download/v$clean_version/$pkg"; then
-              pkg_found=true
-              sudo dpkg -i "$pkg"
-              sudo apt-get install -f
-              break
-            fi
-          done
-
-          if [ "$pkg_found" = false ]; then
-            echo "ERROR: Failed to download package"
-            exit 1
-          fi
-
-          echo "Installation successful:"
-          pwsh -c '$PSVersionTable'
-        fi
-
-    - name: Install PowerShell on macOS
-      if: runner.os == 'macOS'
-      shell: bash
-      run: |
-        version='${{ inputs.Version }}'
-
-        # Version comparison functions
-        get_version_parts() {
-          local version=${1#v}
-          IFS='.' read -ra parts <<< "$version"
-          echo "${parts[0]:-0} ${parts[1]:-0} ${parts[2]:-0}"
-        }
-
-        compare_versions() {
-          local current_parts=($(get_version_parts "$1"))
-          local target_parts=($(get_version_parts "$2"))
-
-          for i in {0..2}; do
-            if (( current_parts[i] < target_parts[i] )); then return 1; fi
-            if (( current_parts[i] > target_parts[i] )); then return 2; fi
-          done
-          return 0
-        }
-
-        # Get version if not specified
-        if [ -z "$version" ]; then
-          version=$(curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep 'tag_name' | cut -d '"' -f 4)
-          echo "Latest PowerShell version: $version"
-        fi
-
-        clean_version=${version#v}
-        echo "Installing PowerShell version: $clean_version"
-
-        # Check existing installation
-        need_to_install=true
-        if [ -f "/usr/local/bin/pwsh" ]; then
-          current_version=$(/usr/local/bin/pwsh -c '$PSVersionTable.PSVersion.ToString()' | tr -d '\r\n')
-          echo "Current PowerShell version: $current_version"
-
-          compare_versions "$current_version" "$clean_version"
-          case $? in
-            0) echo "Versions equal - skipping install"; need_to_install=false ;;
-            2) echo "Current version higher - skipping install"; need_to_install=false ;;
-            1) echo "Current version lower - will upgrade" ;;
-          esac
-        fi
-
-        if [ "$need_to_install" = true ]; then
-          arch=$(uname -m)
-          case $arch in
-            arm64) pkg="powershell-${clean_version}-osx-arm64.pkg" ;;
-            *)     pkg="powershell-${clean_version}-osx-x64.pkg" ;;
-          esac
-
-          if ! curl -LO "https://github.com/PowerShell/PowerShell/releases/download/v$clean_version/$pkg"; then
-            echo "ERROR: Failed to download package"
-            exit 1
-          fi
-
-          sudo installer -pkg "$pkg" -target /
-
-          echo "Installation successful:"
-          /usr/local/bin/pwsh -c '$PSVersionTable'
-        fi
+        echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
+        echo "pwsh-version=$PWSH_VERSION" >> $GITHUB_OUTPUT
+      env:
+        PWSH_PATH: ${{ env.PWSH_PATH }}
+        PWSH_VERSION: ${{ env.PWSH_VERSION }}
