@@ -34,9 +34,9 @@ runs:
         # Check if PowerShell is already installed and compare versions
         $needToInstall = $true
         try {
-          $currentInstall = Get-Package -Name "PowerShell*" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $currentInstall = Get-Command pwsh -ErrorAction SilentlyContinue
           if ($currentInstall) {
-            $currentVersion = $currentInstall.Version
+            $currentVersion = & pwsh -Command '$PSVersionTable.PSVersion.ToString()'
             Write-Host "Current PowerShell version: $currentVersion"
 
             # Parse versions into System.Version objects for proper comparison
@@ -45,45 +45,47 @@ runs:
               $targetVersionObj = [System.Version]$version
 
               # Compare versions
-              $comparison = $currentVersionObj.CompareTo($targetVersionObj)
-              if ($comparison -ge 0) {
+              if ($currentVersionObj -ge $targetVersionObj) {
                 Write-Host "Current version $currentVersion is greater than or equal to target version $version. Skipping installation."
                 $needToInstall = $false
               } else {
                 Write-Host "Current version $currentVersion is lower than target version $version. Will upgrade."
-
-                # Uninstall current version
-                Write-Host "Uninstalling $($currentInstall.Name) version $($currentInstall.Version)"
-                Uninstall-Package -Name $currentInstall.Name -Force -ErrorAction SilentlyContinue
               }
             } catch {
               Write-Host "Error comparing versions: $_ Will proceed with installation."
+              $needToInstall = $true
             }
           } else {
             Write-Host "PowerShell Core not found. Will install version $version"
           }
         } catch {
           Write-Host "Error checking current PowerShell version: $_"
+          $needToInstall = $true
         }
 
         if ($needToInstall) {
-          # Download and install PowerShell
-          $msiName = "PowerShell-$version-win-x64.msi"
-          $downloadUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$version/$msiName"
+          try {
+            # Download and install PowerShell
+            $msiName = "PowerShell-$version-win-x64.msi"
+            $downloadUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$version/$msiName"
 
-          Write-Host "Downloading from $downloadUrl"
-          Invoke-WebRequest -Uri $downloadUrl -OutFile $msiName
+            Write-Host "Downloading from $downloadUrl"
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $msiName -ErrorAction Stop
 
-          Write-Host "Installing PowerShell $version"
-          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $msiName, "/quiet", "/norestart" -Wait
+            Write-Host "Installing PowerShell $version"
+            Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $msiName, "/quiet", "/norestart" -Wait -ErrorAction Stop
 
-          # Verify installation
-          $pwshPath = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
-          if (Test-Path $pwshPath) {
-            Write-Host "PowerShell installed successfully:"
-            & $pwshPath -Command '$PSVersionTable'
-          } else {
-            Write-Error "PowerShell installation failed. Could not find $pwshPath"
+            # Verify installation
+            $pwshPath = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
+            if (Test-Path $pwshPath) {
+              Write-Host "PowerShell installed successfully:"
+              & $pwshPath -Command '$PSVersionTable'
+            } else {
+              Write-Error "PowerShell installation failed. Could not find $pwshPath"
+              exit 1
+            }
+          } catch {
+            Write-Error "Failed to install PowerShell: $_"
             exit 1
           }
         }
