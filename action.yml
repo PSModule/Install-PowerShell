@@ -11,7 +11,7 @@ branding:
 inputs:
   Version:
     description: >
-      PowerShell version to install (e.g. `7.4.1`).
+      PowerShell version to install (e.g. `7.4.1`).
       Use `latest`, `null`, leave it **empty**, or omit the input entirely
       to grab the newest stable release automatically.
     required: false
