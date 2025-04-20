@@ -42,12 +42,43 @@ runs:
 
         if [[ "$DECISION" == "skip" ]]; then
           echo "Skipping installation on Linux (exact version present)."
+          exit 0
+        fi
+
+        # -------------------------------------------------------------------------------------------------
+        # Ubuntu/Debian install via APT package (preferred over legacy GitHub install script)
+        # -------------------------------------------------------------------------------------------------
+        if command -v apt-get >/dev/null; then
+          echo "Using APT package manager (Debian/Ubuntu)…"
+
+          echo "Ensuring Microsoft package repo is configured…"
+          if ! grep -q "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
+            wget -qO- https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+            DIST_CODENAME=$(lsb_release -cs)
+            sudo add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://packages.microsoft.com/ubuntu/$DIST_CODENAME/prod $DIST_CODENAME main"
+          fi
+
+          echo "Updating package index…"
+          sudo apt-get update -y
+
+          if [[ "$DECISION" != "install" ]]; then
+            echo "Removing any existing PowerShell packages…"
+            sudo apt-get remove -y powershell || true
+            sudo apt-get autoremove -y || true
+          fi
+
+          echo "Attempting to install exact version $REQUESTED_VERSION from repo…"
+          EXACT_PKG=$(apt-cache madison powershell | awk '{print $3}' | grep -E "^${REQUESTED_VERSION}(-|$)" | head -n1 || true)
+          if [[ -n "$EXACT_PKG" ]]; then
+            sudo apt-get install -y powershell=$EXACT_PKG
+          else
+            echo "Exact version not found in repo; installing latest available package instead."
+            sudo apt-get install -y powershell
+          fi
+
         else
-          echo "Uninstalling any existing PowerShell…"
-          sudo rm -rf /usr/local/microsoft/powershell || true
-          sudo rm -f /usr/local/bin/pwsh || true
-          echo "Installing PowerShell $REQUESTED_VERSION…"
-          curl -sSL https://aka.ms/install-powershell.sh | sudo bash -s -- -Version "$REQUESTED_VERSION" -Destination /usr/local
+          echo "Unsupported Linux distribution (no apt-get). PowerShell install via package manager not implemented."
+          exit 1
         fi
 
         PWSH_PATH=$(command -v pwsh)
@@ -84,10 +115,9 @@ runs:
           echo "Skipping installation on macOS (exact version present)."
         else
           echo "Uninstalling any existing PowerShell…"
-          sudo rm -rf /usr/local/microsoft/powershell || true
-          sudo rm -f /usr/local/bin/pwsh || true
-          echo "Installing PowerShell $REQUESTED_VERSION…"
-          curl -sSL https://aka.ms/install-powershell.sh | sudo bash -s -- -Version "$REQUESTED_VERSION" -Destination /usr/local
+          brew uninstall --ignore-dependencies --force powershell || true
+          echo "Installing PowerShell $REQUESTED_VERSION via Homebrew…"
+          brew install --cask powershell@$REQUESTED_VERSION || brew install --cask powershell
         fi
 
         PWSH_PATH=$(command -v pwsh)
