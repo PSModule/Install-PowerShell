@@ -28,6 +28,8 @@ runs:
       run: |
         set -e
 
+        echo "Requested version: [$REQUESTED_VERSION]"
+
         # Resolve "" / null / latest  →  concrete latest version (Bash‑3 safe)
         case "${REQUESTED_VERSION:-}" in
             ""|[Ll][Aa][Tt][Ee][Ss][Tt]|[Nn][Uu][Ll][Ll]|~)
@@ -83,6 +85,8 @@ runs:
       run: |
         set -e
 
+        echo "Requested version: [$REQUESTED_VERSION]"
+
         # Resolve "" / null / latest → concrete latest version
         if [[ -z "${REQUESTED_VERSION}" || "${REQUESTED_VERSION}" =~ ^[Ll][Aa][Tt][Ee][Ss][Tt]$ || "${REQUESTED_VERSION}" =~ ^[Nn][Uu][Ll][Ll]$ || "${REQUESTED_VERSION}" == "~" ]]; then
           REQUESTED_VERSION=$(
@@ -125,6 +129,7 @@ runs:
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
       run: |
+        Write-Host  "Requested version: [$REQUESTED_VERSION]"
         # Resolve "" / null / latest  →  concrete latest version
         $req = $env:REQUESTED_VERSION
         if ([string]::IsNullOrWhiteSpace($req) -or
