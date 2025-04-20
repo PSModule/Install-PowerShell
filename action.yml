@@ -105,16 +105,12 @@ runs:
       run: |
         Write-Host "Detecting existing PowerShell on Windows…"
         try {
-          $detected = (pwsh -NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.ToString()")
+          $detected = (& pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
         } catch {
           $detected = $null
         }
 
-        if ($null -eq $detected -or $detected -eq '') {
-          $detectedDisplay = '<none>'
-        } else {
-          $detectedDisplay = $detected
-        }
+        $detectedDisplay = if ([string]::IsNullOrWhiteSpace($detected)) { '<none>' } else { $detected }
         Write-Host "Detected version: $detectedDisplay"
         Write-Host "Requested version: $env:REQUESTED_VERSION"
         Write-Host "Reinstall flag: $env:REINSTALL"
@@ -135,11 +131,16 @@ runs:
         if ($decision -eq 'skip') {
           Write-Host 'Skipping installation on Windows (exact version present).'
         } else {
-          Write-Host 'Uninstalling any existing PowerShell…'
-          winget uninstall --id Microsoft.PowerShell -e --silent | Out-Null
+          Write-Host 'Removing existing PowerShell installation (if any)…'
+          $pwshProducts = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -like 'PowerShell*' }
+          foreach ($p in $pwshProducts) {
+            Write-Host "Uninstalling $($p.Name)…"
+            Start-Process msiexec.exe -ArgumentList '/x', $p.IdentifyingNumber, '/quiet', '/norestart' -Wait
+          }
+
           Write-Host "Installing PowerShell $env:REQUESTED_VERSION…"
           $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
           $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
-          Invoke-WebRequest $url -OutFile $msi
+          Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
           Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
         }
