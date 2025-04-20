@@ -91,15 +91,18 @@ runs:
         echo "Requested version: [$REQUESTED_VERSION]"
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
-        if [[ "${REQUESTED_VERSION}" =~ ^[Ll][Aa][Tt][Ee][Ss][Tt]$ ]]; then
+        if [[ "${REQUESTED_VERSION,,}" == "latest" ]]; then
           REQUESTED_VERSION=$(
             curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
             grep '"tag_name"' | head -n1 |
             sed -E 's/.*"v?([^"]+)".*/\1/'
           )
           echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
-        elif [[ -z "${REQUESTED_VERSION}" ]]; then
-          echo "Error: Version input is required (or use 'latest')"
+        fi
+
+        # Validate REQUESTED_VERSION is not empty
+        if [[ -z "${REQUESTED_VERSION}" ]]; then
+          echo "Error: Could not determine a valid PowerShell version."
           exit 1
         fi
 
@@ -109,9 +112,17 @@ runs:
           exit 0
         fi
 
-        if brew info --cask powershell@$REQUESTED_VERSION >/dev/null 2>&1; then
-          brew install --cask powershell@$REQUESTED_VERSION
+        # Try Homebrew first
+        if command -v brew >/dev/null; then
+          echo "Using Homebrew package manager..."
+          if [[ "${REQUESTED_VERSION}" == "latest" ]]; then
+            brew install --cask powershell
+          else
+            brew install --cask powershell@$REQUESTED_VERSION
+          fi
         else
+          # Fall back to direct download
+          echo "Homebrew not available, downloading directly..."
           ARCH=$(uname -m)
           if [[ "$ARCH" == "arm64" ]]; then
             PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg"
