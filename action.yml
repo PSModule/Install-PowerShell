@@ -1,6 +1,6 @@
 name: Install PowerShell
 description: >
-  Install a specific version —or the latest stable version— of PowerShell Core
+  Install a specific version —or the latest stable version— of PowerShell Core
   on any GitHub runner (Linux, macOS, Windows).
   Skips the install if the requested version is already present.
 author: PSModule
@@ -15,7 +15,7 @@ inputs:
       Use `latest`, `null`, leave it **empty**, or omit the input entirely
       to grab the newest stable release automatically.
     required: false
-    default: '' # Empty string → newest release
+    default: ''
 
 runs:
   using: composite
@@ -29,9 +29,8 @@ runs:
         set -e
 
         # Resolve empty / 'null' / 'latest' to a concrete version number
-        if [[ -z "$REQUESTED_VERSION" || \
-              "${REQUESTED_VERSION,,}" == "latest" || \
-              "${REQUESTED_VERSION,,}" == "null" ]]; then
+        lower_req="$(printf '%s' "$REQUESTED_VERSION" | tr '[:upper:]' '[:lower:]')"
+        if [[ -z "$REQUESTED_VERSION" || "$lower_req" == "latest" || "$lower_req" == "null" ]]; then
           REQUESTED_VERSION=$(
             curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest \
               | grep -oP '"tag_name":\s*"\K([^"]+)' | sed 's/^v//'
@@ -83,9 +82,8 @@ runs:
         set -e
 
         # Resolve empty / 'null' / 'latest' to a concrete version number
-        if [[ -z "$REQUESTED_VERSION" || \
-              "${REQUESTED_VERSION,,}" == "latest" || \
-              "${REQUESTED_VERSION,,}" == "null" ]]; then
+        lower_req="$(printf '%s' "$REQUESTED_VERSION" | tr '[:upper:]' '[:lower:]')"
+        if [[ -z "$REQUESTED_VERSION" || "$lower_req" == "latest" || "$lower_req" == "null" ]]; then
           REQUESTED_VERSION=$(
             curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest \
               | grep -oP '"tag_name":\s*"\K([^"]+)' | sed 's/^v//'
