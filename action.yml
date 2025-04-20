@@ -1,37 +1,27 @@
-name: "Install PowerShell"
-description: "Install a specific version of PowerShell Core on any GitHub runner (Linux, macOS, Windows). Handles install, downgrade, or forced reinstall with uniform logging."
-author: "Your Org"
+name: Install PowerShell
+description: Install a specific version of PowerShell Core on any GitHub runner (Linux, macOS, Windows). Handles install, downgrade, or forced reinstall with uniform logging.
+author: PSModule
 branding:
-  icon: "terminal"
-  color: "purple"
+  icon: terminal
+  color: purple
 
 inputs:
-  version:
-    description: "Exact PowerShell version to install (e.g. 7.4.1)"
+  Version:
+    description: Exact PowerShell version to install (e.g. 7.4.1)
     required: true
-  reinstall:
-    description: "Set to 'true' to uninstall & reinstall even when the exact version is already present."
-    default: "false"
-  package-source:
-    description: "Package source: 'microsoft' (default), 'github', or custom direct URL to the archive/MSI."
-    default: "microsoft"
+  Reinstall:
+    description: Set to 'true' to uninstall & reinstall even when the exact version is already present.
+    default: 'false'
 
 runs:
-  using: "composite"
+  using: composite
   steps:
-    # ---------------------------------------------------------------------
-    # Common environment
-    # ---------------------------------------------------------------------
     - name: Set shared env
       shell: bash
       run: |
-        echo "REQUESTED_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
-        echo "REINSTALL=${{ inputs.reinstall }}" >> $GITHUB_ENV
-        echo "PACKAGE_SOURCE=${{ inputs['package-source'] }}" >> $GITHUB_ENV
+        echo "REQUESTED_VERSION=${{ inputs.Version }}" >> $GITHUB_ENV
+        echo "REINSTALL=${{ inputs.Reinstall }}" >> $GITHUB_ENV
 
-    # ---------------------------------------------------------------------
-    # Linux installer ------------------------------------------------------
-    # ---------------------------------------------------------------------
     - name: Install PowerShell (Linux)
       if: runner.os == 'Linux'
       id: linux
@@ -71,9 +61,6 @@ runs:
         echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
         echo "pwsh-version=$REQUESTED_VERSION" >> $GITHUB_OUTPUT
 
-    # ---------------------------------------------------------------------
-    # macOS installer ------------------------------------------------------
-    # ---------------------------------------------------------------------
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
       id: macos
@@ -113,9 +100,6 @@ runs:
         echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
         echo "pwsh-version=$REQUESTED_VERSION" >> $GITHUB_OUTPUT
 
-    # ---------------------------------------------------------------------
-    # Windows installer ----------------------------------------------------
-    # ---------------------------------------------------------------------
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
       id: windows
@@ -152,22 +136,3 @@ runs:
           Invoke-WebRequest $url -OutFile $msi
           Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
         }
-
-        $pwshPath = (Get-Command pwsh).Source
-        echo "PWSH_PATH=$pwshPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "PWSH_VERSION=$($env:REQUESTED_VERSION)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "pwsh-path=$pwshPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-        echo "pwsh-version=$($env:REQUESTED_VERSION)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-    # ---------------------------------------------------------------------
-    # Aggregate outputs ----------------------------------------------------
-    # ---------------------------------------------------------------------
-    - name: Export composite outputs
-      id: export
-      shell: bash
-      run: |
-        echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
-        echo "pwsh-version=$PWSH_VERSION" >> $GITHUB_OUTPUT
-      env:
-        PWSH_PATH: ${{ env.PWSH_PATH }}
-        PWSH_VERSION: ${{ env.PWSH_VERSION }}
