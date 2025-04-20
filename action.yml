@@ -79,14 +79,75 @@ runs:
       if: runner.os == 'macOS'
       shell: bash
       run: |
+        # Clean up existing PowerShell installation
         sudo rm -rf /usr/local/microsoft/powershell
+
+        # Get version information
         version='${{ inputs.version }}'
         if [ -z "$version" ]; then
+          # Get latest version if not specified
           version=$(curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep 'tag_name' | cut -d '"' -f 4)
+          echo "Latest PowerShell version: $version"
         else
           version="v$version"
+          echo "Installing specified PowerShell version: $version"
         fi
-        pkg="powershell-${version#v}-osx.pkg"
-        url="https://github.com/PowerShell/PowerShell/releases/download/$version/$pkg"
-        curl -LO $url
-        sudo installer -pkg $pkg -target /
+
+        # The version without 'v' prefix
+        clean_version=${version#v}
+
+        # Try the different naming patterns for the macOS package
+        pkg_patterns=(
+          "powershell-$clean_version-osx-x64.pkg"
+          "powershell-$clean_version-osx-arm64.pkg"
+          "powershell-$clean_version-osx.pkg"
+        )
+
+        # Determine if running on Apple Silicon or Intel
+        if [ "$(uname -m)" = "arm64" ]; then
+          echo "Detected Apple Silicon (ARM64)"
+          arch="arm64"
+        else
+          echo "Detected Intel CPU (x64)"
+          arch="x64"
+        fi
+
+        # Try to download the appropriate package based on architecture
+        download_success=false
+
+        for pkg_name in "${pkg_patterns[@]}"; do
+          echo "Trying to download $pkg_name..."
+          url="https://github.com/PowerShell/PowerShell/releases/download/$version/$pkg_name"
+
+          # Try to download the file
+          if curl -LO $url --fail; then
+            echo "Successfully downloaded $pkg_name"
+            download_success=true
+            break
+          else
+            echo "Failed to download $pkg_name"
+          fi
+        done
+
+        if [ "$download_success" = false ]; then
+          echo "ERROR: Could not download PowerShell package for macOS. Please check version and available packages."
+          exit 1
+        fi
+
+        # Verify the file exists before installation
+        if [ -f "$pkg_name" ]; then
+          echo "Installing PowerShell package: $pkg_name"
+          sudo installer -pkg "$pkg_name" -target /
+
+          # Verify the installation
+          if [ -f "/usr/local/bin/pwsh" ]; then
+            echo "PowerShell installed successfully:"
+            /usr/local/bin/pwsh -Command '$PSVersionTable'
+          else
+            echo "ERROR: PowerShell installation failed. Could not find /usr/local/bin/pwsh"
+            exit 1
+          fi
+        else
+          echo "ERROR: Downloaded package file not found: $pkg_name"
+          exit 1
+        fi
