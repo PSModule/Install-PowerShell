@@ -22,9 +22,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        version: ['7.4.0', '7.5.0']  # Specify the versions to test
-    name: Action-Test - [Basic]
+        version: ['7.2.0', '7.4.0', '7.4.7', '7.5.0']
     runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} - ${{ matrix.version }}
     steps:
       # Need to check out as part of the test, as its a local action
       - name: Checkout repo
