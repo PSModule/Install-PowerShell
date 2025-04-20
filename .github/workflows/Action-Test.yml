@@ -22,23 +22,42 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        version: ['', '7.4.7', '7.5.0']
+        version: ['', null, 'latest', '7.4.7', '7.5.0']   # '' → should resolve to latest
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os }} - ${{ matrix.version }}
+    name: ${{ matrix.os }} - ${{ matrix.version == '' && 'latest' || matrix.version }}
     steps:
-      # Need to check out as part of the test, as its a local action
+      # 1. Checkout the repo so the local action is available
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # 2. Run the action under test
       - name: Action-Test
         uses: ./
         with:
           Version: ${{ matrix.version }}
 
-      - name: Test version
+      # 3. Verify the installed PowerShell version
+      - name: Verify installed version
         shell: pwsh
         run: |
-          $PSVersionTable | Format-Table -AutoSize
-          if ($PSVersionTable.PSVersion -ne '${{ matrix.version }}') {
-              throw "Failed to install the expected version"
+          # Requested version that came from the matrix
+          $requested = '${{ matrix.version }}'
+
+          # When empty / 'null' / 'latest' → resolve to latest stable release
+          if ([string]::IsNullOrWhiteSpace($requested) -or
+              $requested.Trim().ToLower() -in @('latest','null')) {
+
+              $requested = (Invoke-RestMethod `
+                              -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
+                           ).tag_name.TrimStart('v')
+              Write-Host "Resolved 'latest' → $requested"
+          }
+
+          # Actual version installed by the action
+          $installed = ($PSVersionTable.PSVersion).ToString()
+          Write-Host "Installed PowerShell version: $installed"
+          Write-Host "Expected  PowerShell version: $requested"
+
+          if ($installed -ne $requested) {
+              throw "Failed: expected $requested but got $installed"
           }
