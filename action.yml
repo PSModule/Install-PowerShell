@@ -7,8 +7,7 @@ branding:
 
 inputs:
   Version:
-    description: The version of PowerShell to install, i.e. 7.4.0 or 7.5.0. If not provided it, latest version is installed.
-    required: false
+    description: The version of PowerShell to install, e.g., 7.4.0 or 7.5.0. If not provided, the latest version is installed.
     default: ''
 
 runs:
@@ -19,12 +18,46 @@ runs:
       shell: powershell
       run: |
         $version = '${{ inputs.version }}'
-        winget uninstall --id Microsoft.PowerShell --accept-source-agreements --accept-package-agreements
-        if ([string]::IsNullOrWhiteSpace($version)) {
-            winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements
+
+        # Try to remove existing PowerShell installation
+        try {
+          # Find existing PowerShell installations to remove
+          Get-Package -Name "PowerShell*" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "Uninstalling $($_.Name) version $($_.Version)"
+            Uninstall-Package -Name $_.Name -Force -ErrorAction SilentlyContinue
+          }
+        } catch {
+          Write-Host "Error removing existing PowerShell: $_"
         }
-        else {
-            winget install --id Microsoft.PowerShell --version $version --source winget --accept-package-agreements --accept-source-agreements
+
+        # Get the version to install
+        if ([string]::IsNullOrWhiteSpace($version)) {
+          # Get latest version from GitHub API
+          $releaseInfo = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
+          $version = $releaseInfo.tag_name.Trim('v')
+          Write-Host "Latest PowerShell version: $version"
+        } else {
+          Write-Host "Installing specified PowerShell version: $version"
+        }
+
+        # Download and install PowerShell
+        $msiName = "PowerShell-$version-win-x64.msi"
+        $downloadUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$version/$msiName"
+
+        Write-Host "Downloading from $downloadUrl"
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $msiName
+
+        Write-Host "Installing PowerShell $version"
+        Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $msiName, "/quiet", "/norestart" -Wait
+
+        # Verify installation
+        $pwshPath = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
+        if (Test-Path $pwshPath) {
+          Write-Host "PowerShell installed successfully:"
+          & $pwshPath -Command '$PSVersionTable'
+        } else {
+          Write-Error "PowerShell installation failed. Could not find $pwshPath"
+          exit 1
         }
 
     - name: Install PowerShell on Ubuntu
