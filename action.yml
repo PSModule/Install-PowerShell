@@ -90,8 +90,11 @@ runs:
 
         echo "Requested version: [$REQUESTED_VERSION]"
 
-        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
-        if [[ "${REQUESTED_VERSION,,}" == "latest" ]]; then
+        # Convert to lowercase for comparison (macOS-compatible method)
+        REQ_VER_LOWER=$(echo "$REQUESTED_VERSION" | tr '[:upper:]' '[:lower:]')
+
+        # Only resolve to latest version if explicitly set to 'latest'
+        if [[ "$REQ_VER_LOWER" == "latest" ]]; then
           REQUESTED_VERSION=$(
             curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
             grep '"tag_name"' | head -n1 |
@@ -112,25 +115,37 @@ runs:
           exit 0
         fi
 
-        # Try Homebrew first
+        # Try Homebrew first (simplified approach)
         if command -v brew >/dev/null; then
           echo "Using Homebrew package manager..."
-          if [[ "${REQUESTED_VERSION}" == "latest" ]]; then
+          # Homebrew handles 'latest' automatically when no version is specified
+          if [[ "$REQ_VER_LOWER" == "latest" ]]; then
             brew install --cask powershell
           else
-            brew install --cask powershell@$REQUESTED_VERSION
+            # Try specific version formula first
+            if brew install --cask "powershell@$REQUESTED_VERSION" 2>/dev/null; then
+              echo "Successfully installed via Homebrew"
+            else
+              # Fall back to generic formula if versioned one doesn't exist
+              echo "Version-specific formula not found, installing latest via Homebrew"
+              brew install --cask powershell
+            fi
           fi
         else
           # Fall back to direct download
           echo "Homebrew not available, downloading directly..."
           ARCH=$(uname -m)
-          if [[ "$ARCH" == "arm64" ]]; then
-            PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg"
-          else
-            PKG_NAME="powershell-${REQUESTED_VERSION}-osx-x64.pkg"
-          fi
+          case "$ARCH" in
+            "arm64") PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg" ;;
+            *)       PKG_NAME="powershell-${REQUESTED_VERSION}-osx-x64.pkg" ;;
+          esac
+
           URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
-          curl -sSL "$URL" -o "$PKG_NAME"
+          echo "Downloading from: $URL"
+          if ! curl -sSL "$URL" -o "$PKG_NAME"; then
+            echo "Error: Failed to download PowerShell package"
+            exit 1
+          fi
           sudo installer -pkg "$PKG_NAME" -target /
         fi
 
