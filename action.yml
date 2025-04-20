@@ -96,10 +96,18 @@ runs:
       run: |
         version='${{ inputs.Version }}'
 
+        # Function to normalize version (remove trailing .0 and v prefix)
+        normalize_version() {
+          local version=${1#v}  # Remove v prefix
+          version=${version%.0}  # Remove trailing .0
+          version=${version%.0}  # Remove additional .0 if present
+          echo "$version"
+        }
+
         # Function to compare versions
         compare_versions() {
-            local current=$1
-            local target=$2
+            local current=$(normalize_version "$1")
+            local target=$(normalize_version "$2")
 
             # Split versions into arrays
             IFS='.' read -ra current_parts <<< "$current"
@@ -144,6 +152,7 @@ runs:
               0) echo "Versions are equal"; need_to_install=false ;;
               2) echo "Current version is higher"; need_to_install=false ;;
               1) echo "Current version is lower"; need_to_install=true ;;
+              *) echo "Version comparison failed, proceeding with installation" ;;
           esac
         else
           echo "PowerShell is not installed. Will install version $clean_version"
@@ -154,8 +163,18 @@ runs:
           sudo apt-get update
           sudo apt-get install -y wget apt-transport-https
 
-          wget https://github.com/PowerShell/PowerShell/releases/download/v$clean_version/powershell_${clean_version}-1.deb_amd64.deb
-          sudo dpkg -i powershell_${clean_version}-1.deb_amd64.deb
+          # Download package - handle both old and new naming formats
+          pkg_name="powershell_${clean_version}-1.deb_amd64.deb"
+          if ! wget "https://github.com/PowerShell/PowerShell/releases/download/v$clean_version/$pkg_name"; then
+            # Try alternative package name format
+            pkg_name="powershell-${clean_version}-linux-x64.deb"
+            wget "https://github.com/PowerShell/PowerShell/releases/download/v$clean_version/$pkg_name" || {
+              echo "ERROR: Failed to download PowerShell package"
+              exit 1
+            }
+          fi
+
+          sudo dpkg -i "$pkg_name"
           sudo apt-get install -f
 
           # Verify installation
