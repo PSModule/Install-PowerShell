@@ -100,8 +100,19 @@ runs:
           current_version=$(pwsh -c '$PSVersionTable.PSVersion.ToString()' | tr -d '\r\n')
           echo "Current PowerShell version: $current_version"
 
-          # Compare versions
-          if [ "$(printf '%s\n' "$clean_version" "$current_version" | sort -V | head -n1)" != "$clean_version" ]; then
+          # Properly compare versions with version components
+          current_major=$(echo "$current_version" | cut -d'.' -f1)
+          current_minor=$(echo "$current_version" | cut -d'.' -f2)
+          current_patch=$(echo "$current_version" | cut -d'.' -f3)
+
+          target_major=$(echo "$clean_version" | cut -d'.' -f1)
+          target_minor=$(echo "$clean_version" | cut -d'.' -f2)
+          target_patch=$(echo "$clean_version" | cut -d'.' -f3)
+
+          # Check if the current version is greater than or equal to target
+          if [ "$current_major" -gt "$target_major" ] ||
+             ([ "$current_major" -eq "$target_major" ] && [ "$current_minor" -gt "$target_minor" ]) ||
+             ([ "$current_major" -eq "$target_major" ] && [ "$current_minor" -eq "$target_minor" ] && [ "$current_patch" -ge "$target_patch" ]); then
             echo "Current version $current_version is greater than or equal to target version $clean_version. Skipping installation."
             need_to_install=false
           else
@@ -151,8 +162,19 @@ runs:
           current_version=$(/usr/local/bin/pwsh -c '$PSVersionTable.PSVersion.ToString()' | tr -d '\r\n')
           echo "Current PowerShell version: $current_version"
 
-          # Compare versions
-          if [ "$(printf '%s\n' "$clean_version" "$current_version" | sort -V | head -n1)" != "$clean_version" ]; then
+          # Properly compare versions with version components
+          current_major=$(echo "$current_version" | cut -d'.' -f1)
+          current_minor=$(echo "$current_version" | cut -d'.' -f2)
+          current_patch=$(echo "$current_version" | cut -d'.' -f3)
+
+          target_major=$(echo "$clean_version" | cut -d'.' -f1)
+          target_minor=$(echo "$clean_version" | cut -d'.' -f2)
+          target_patch=$(echo "$clean_version" | cut -d'.' -f3)
+
+          # Check if the current version is greater than or equal to target
+          if [ "$current_major" -gt "$target_major" ] ||
+             ([ "$current_major" -eq "$target_major" ] && [ "$current_minor" -gt "$target_minor" ]) ||
+             ([ "$current_major" -eq "$target_major" ] && [ "$current_minor" -eq "$target_minor" ] && [ "$current_patch" -ge "$target_patch" ]); then
             echo "Current version $current_version is greater than or equal to target version $clean_version. Skipping installation."
             need_to_install=false
           else
