@@ -37,16 +37,24 @@ runs:
             $currentVersion = $currentInstall.Version
             Write-Host "Current PowerShell version: $currentVersion"
 
-            # Compare versions
-            if ([System.Version]$currentVersion -ge [System.Version]$version) {
-              Write-Host "Current version is greater than or equal to target version. Skipping installation."
-              $needToInstall = $false
-            } else {
-              Write-Host "Current version is lower than target version. Will upgrade."
+            # Parse versions into System.Version objects for proper comparison
+            try {
+              $currentVersionObj = [System.Version]$currentVersion
+              $targetVersionObj = [System.Version]$version
 
-              # Uninstall current version
-              Write-Host "Uninstalling $($currentInstall.Name) version $($currentInstall.Version)"
-              Uninstall-Package -Name $currentInstall.Name -Force -ErrorAction SilentlyContinue
+              # Compare versions
+              if ($currentVersionObj -ge $targetVersionObj) {
+                Write-Host "Current version $currentVersion is greater than or equal to target version $version. Skipping installation."
+                $needToInstall = $false
+              } else {
+                Write-Host "Current version $currentVersion is lower than target version $version. Will upgrade."
+
+                # Uninstall current version
+                Write-Host "Uninstalling $($currentInstall.Name) version $($currentInstall.Version)"
+                Uninstall-Package -Name $currentInstall.Name -Force -ErrorAction SilentlyContinue
+              }
+            } catch {
+              Write-Host "Error comparing versions: $_. Will proceed with installation."
             }
           } else {
             Write-Host "PowerShell Core not found. Will install version $version"
