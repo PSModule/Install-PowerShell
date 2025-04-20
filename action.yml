@@ -12,10 +12,9 @@ inputs:
   Version:
     description: >
       PowerShell version to install (e.g. `7.4.1`).
-      Use `latest`, `null`, leave it **empty**, or omit the input entirely
-      to grab the newest stable release automatically.
+      Set to 'latest' to automatically install the newest stable release.
     required: false
-    default: '' # Empty string → newest release
+    default: 'latest'
 
 runs:
   using: composite
@@ -30,15 +29,19 @@ runs:
 
         echo "Requested version: [$REQUESTED_VERSION]"
 
-        # Resolve "" / null / latest  →  concrete latest version (Bash‑3 safe)
+        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
-            ""|[Ll][Aa][Tt][Ee][Ss][Tt]|[Nn][Uu][Ll][Ll]|~)
+            [Ll][Aa][Tt][Ee][Ss][Tt])
                 REQUESTED_VERSION=$(
                   curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
                     grep '"tag_name"' | head -n1 |
                     sed -E 's/.*"v?([^"]+)".*/\1/'
                 )
                 echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                ;;
+            "")
+                echo "Error: Version input is required (or use 'latest')"
+                exit 1
                 ;;
         esac
 
@@ -87,19 +90,16 @@ runs:
 
         echo "Requested version: [$REQUESTED_VERSION]"
 
-        # Resolve "" / null / latest → concrete latest version
-        if [[ -z "${REQUESTED_VERSION}" || "${REQUESTED_VERSION}" =~ ^[Ll][Aa][Tt][Ee][Ss][Tt]$ || "${REQUESTED_VERSION}" =~ ^[Nn][Uu][Ll][Ll]$ || "${REQUESTED_VERSION}" == "~" ]]; then
+        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
+        if [[ "${REQUESTED_VERSION}" =~ ^[Ll][Aa][Tt][Ee][Ss][Tt]$ ]]; then
           REQUESTED_VERSION=$(
             curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
             grep '"tag_name"' | head -n1 |
             sed -E 's/.*"v?([^"]+)".*/\1/'
           )
           echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
-        fi
-
-        # Validate REQUESTED_VERSION is not empty
-        if [[ -z "${REQUESTED_VERSION}" ]]; then
-          echo "Error: Could not determine a valid PowerShell version."
+        elif [[ -z "${REQUESTED_VERSION}" ]]; then
+          echo "Error: Version input is required (or use 'latest')"
           exit 1
         fi
 
@@ -130,14 +130,15 @@ runs:
         REQUESTED_VERSION: ${{ inputs.Version }}
       run: |
         Write-Host  "Requested version: [$REQUESTED_VERSION]"
-        # Resolve "" / null / latest  →  concrete latest version
+        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         $req = $env:REQUESTED_VERSION
-        if ([string]::IsNullOrWhiteSpace($req) -or
-            $req.Trim().ToLower() -in @('latest','null','~')) {
-
+        if ($req -and $req.Trim().ToLower() -eq 'latest') {
             $latest = (Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest').tag_name.TrimStart('v')
             Write-Host "Latest stable PowerShell release detected: $latest"
             $env:REQUESTED_VERSION = $latest
+        } elseif ([string]::IsNullOrWhiteSpace($req)) {
+            Write-Host "Error: Version input is required (or use 'latest')"
+            exit 1
         }
 
         try {
