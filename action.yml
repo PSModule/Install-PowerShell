@@ -47,7 +47,7 @@ runs:
         fi
 
         if command -v apt-get >/dev/null; then
-          echo "Using APT package manager (Debian/Ubuntu)…"
+          echo "Using APT package manager (Debian/Ubuntu)..."
 
           if ! grep -q "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
             wget -qO- https://packages.microsoft.com/keys/microsoft.asc \
@@ -83,17 +83,21 @@ runs:
       run: |
         set -e
 
-        # Resolve "" / null / latest  →  concrete latest version (Bash‑3 safe)
-        case "${REQUESTED_VERSION:-}" in
-            ""|[Ll][Aa][Tt][Ee][Ss][Tt]|[Nn][Uu][Ll][Ll]|~)
-                REQUESTED_VERSION=$(
-                  curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-                    grep '"tag_name"' | head -n1 |
-                    sed -E 's/.*"v?([^"]+)".*/\1/'
-                )
-                echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
-                ;;
-        esac
+        # Resolve "" / null / latest → concrete latest version
+        if [[ -z "${REQUESTED_VERSION}" || "${REQUESTED_VERSION}" =~ ^[Ll][Aa][Tt][Ee][Ss][Tt]$ || "${REQUESTED_VERSION}" =~ ^[Nn][Uu][Ll][Ll]$ || "${REQUESTED_VERSION}" == "~" ]]; then
+          REQUESTED_VERSION=$(
+            curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+            grep '"tag_name"' | head -n1 |
+            sed -E 's/.*"v?([^"]+)".*/\1/'
+          )
+          echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+        fi
+
+        # Validate REQUESTED_VERSION is not empty
+        if [[ -z "${REQUESTED_VERSION}" ]]; then
+          echo "Error: Could not determine a valid PowerShell version."
+          exit 1
+        fi
 
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
         if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
