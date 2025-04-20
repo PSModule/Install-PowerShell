@@ -46,7 +46,7 @@ runs:
         fi
 
         # -------------------------------------------------------------------------------------------------
-        # Ubuntu/Debian install via APT package (preferred over legacy GitHub install script)
+        # Debian/Ubuntu installation
         # -------------------------------------------------------------------------------------------------
         if command -v apt-get >/dev/null; then
           echo "Using APT package manager (Debian/Ubuntu)…"
@@ -72,20 +72,19 @@ runs:
           if [[ -n "$EXACT_PKG" ]]; then
             sudo apt-get install -y powershell=$EXACT_PKG
           else
-            echo "Exact version not found in repo; installing latest available package instead."
-            sudo apt-get install -y powershell
+            echo "Exact version not found in repo; downloading .deb package from GitHub release…"
+            ARCH=$(dpkg --print-architecture)
+            DEB_NAME="powershell_${REQUESTED_VERSION}-1.deb_${ARCH}.deb"
+            URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
+            echo "Fetching $URL"
+            wget -q "$URL" -O "$DEB_NAME"
+            sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
           fi
 
         else
           echo "Unsupported Linux distribution (no apt-get). PowerShell install via package manager not implemented."
           exit 1
         fi
-
-        PWSH_PATH=$(command -v pwsh)
-        echo "PWSH_PATH=$PWSH_PATH" >> $GITHUB_ENV
-        echo "PWSH_VERSION=$REQUESTED_VERSION" >> $GITHUB_ENV
-        echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
-        echo "pwsh-version=$REQUESTED_VERSION" >> $GITHUB_OUTPUT
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
@@ -116,15 +115,20 @@ runs:
         else
           echo "Uninstalling any existing PowerShell…"
           brew uninstall --ignore-dependencies --force powershell || true
-          echo "Installing PowerShell $REQUESTED_VERSION via Homebrew…"
-          brew install --cask powershell@$REQUESTED_VERSION || brew install --cask powershell
-        fi
 
-        PWSH_PATH=$(command -v pwsh)
-        echo "PWSH_PATH=$PWSH_PATH" >> $GITHUB_ENV
-        echo "PWSH_VERSION=$REQUESTED_VERSION" >> $GITHUB_ENV
-        echo "pwsh-path=$PWSH_PATH" >> $GITHUB_OUTPUT
-        echo "pwsh-version=$REQUESTED_VERSION" >> $GITHUB_OUTPUT
+          echo "Attempting to install PowerShell $REQUESTED_VERSION via Homebrew…"
+          if brew info --cask powershell@$REQUESTED_VERSION >/dev/null 2>&1; then
+            brew install --cask powershell@$REQUESTED_VERSION
+          else
+            echo "Exact version not available via Homebrew; downloading .pkg from GitHub release…"
+            ARCH=$(uname -m)
+            if [[ "$ARCH" == "arm64" ]]; then PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg"; else PKG_NAME="powershell-${REQUESTED_VERSION}-osx-x64.pkg"; fi
+            URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
+            echo "Fetching $URL"
+            curl -sSL "$URL" -o "$PKG_NAME"
+            sudo installer -pkg "$PKG_NAME" -target /
+          fi
+        fi
 
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
