@@ -19,6 +19,7 @@ permissions:
 jobs:
   ActionTestBasic:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         version: ['7.4.0', '7.5.0']  # Specify the versions to test
