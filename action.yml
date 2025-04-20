@@ -87,6 +87,7 @@ runs:
         }
 
         Write-Host "Detected PowerShell version: $detected"
+        Write-Host "Requested PowerShell version: $env:REQUESTED_VERSION"
 
         if ($detected -eq $env:REQUESTED_VERSION) {
           Write-Host "PowerShell $detected already installed. Skipping."
