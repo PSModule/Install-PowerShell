@@ -81,15 +81,16 @@ runs:
       run: |
         set -e
 
-        # Resolve empty / 'null' / 'latest' to a concrete version number
-        lower_req="$(printf '%s' "$REQUESTED_VERSION" | tr '[:upper:]' '[:lower:]')"
-        if [[ -z "$REQUESTED_VERSION" || "$lower_req" == "latest" || "$lower_req" == "null" ]]; then
-          REQUESTED_VERSION=$(
-            curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-            grep '"tag_name"' | head -n1 | sed -E 's/.*"v?([^"]+)".*/\1/'
-          )
-          echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
-        fi
+        case "${REQUESTED_VERSION:-}" in
+          "" | [Ll][Aa][Tt][Ee][Ss][Tt] | [Nn][Uu][Ll][Ll])
+            REQUESTED_VERSION=$(
+              curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                grep '"tag_name"' | head -n1 |
+                sed -E 's/.*"v?([^"]+)".*/\1/'
+            )
+            echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+            ;;
+        esac
 
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
         if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
