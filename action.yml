@@ -1,5 +1,7 @@
 name: Install PowerShell
-description: Install a specific version of PowerShell Core on any GitHub runner (Linux, macOS, Windows). Handles install, downgrade, or forced reinstall with uniform logging.
+description: |
+  Install a specific version of PowerShell Core on any GitHub runner (Linux, macOS, Windows).
+  Handles install, downgrade, or forced reinstall.
 author: PSModule
 branding:
   icon: terminal
@@ -24,13 +26,12 @@ runs:
       shell: bash
       run: |
         set -e
-        log() { echo "::notice title=pwsh-installer::[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $1"; }
 
-        log "Detecting existing PowerShell on Linux…"
+        echo "Detecting existing PowerShell on Linux…"
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
-        log "Detected version: ${DETECTED_VERSION:-<none>}"
-        log "Requested version: $REQUESTED_VERSION"
-        log "Reinstall flag: $REINSTALL"
+        echo "Detected version: ${DETECTED_VERSION:-<none>}"
+        echo "Requested version: $REQUESTED_VERSION"
+        echo "Reinstall flag: $REINSTALL"
 
         if [[ -z "$DETECTED_VERSION" ]]; then
           DECISION="install"
@@ -39,15 +40,15 @@ runs:
         else
           DECISION="uninstall-install"  # covers downgrade or upgrade
         fi
-        log "Decision: $DECISION"
+        echo "Decision: $DECISION"
 
         if [[ "$DECISION" == "skip" ]]; then
-          log "Skipping installation on Linux (exact version present)."
+          echo "Skipping installation on Linux (exact version present)."
         else
-          log "Uninstalling any existing PowerShell…"
+          echo "Uninstalling any existing PowerShell…"
           sudo rm -rf /usr/local/microsoft/powershell || true
           sudo rm -f /usr/local/bin/pwsh || true
-          log "Installing PowerShell $REQUESTED_VERSION…"
+          echo "Installing PowerShell $REQUESTED_VERSION…"
           curl -sSL https://aka.ms/install-powershell.sh | sudo bash -s -- -Version "$REQUESTED_VERSION" -Destination /usr/local
         fi
 
@@ -65,13 +66,11 @@ runs:
       shell: bash
       run: |
         set -e
-        log() { echo "::notice title=pwsh-installer::[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $1"; }
-
-        log "Detecting existing PowerShell on macOS…"
+        echo "Detecting existing PowerShell on macOS…"
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
-        log "Detected version: ${DETECTED_VERSION:-<none>}"
-        log "Requested version: $REQUESTED_VERSION"
-        log "Reinstall flag: $REINSTALL"
+        echo "Detected version: ${DETECTED_VERSION:-<none>}"
+        echo "Requested version: $REQUESTED_VERSION"
+        echo "Reinstall flag: $REINSTALL"
 
         if [[ -z "$DETECTED_VERSION" ]]; then
           DECISION="install"
@@ -80,15 +79,15 @@ runs:
         else
           DECISION="uninstall-install"
         fi
-        log "Decision: $DECISION"
+        echo "Decision: $DECISION"
 
         if [[ "$DECISION" == "skip" ]]; then
-          log "Skipping installation on macOS (exact version present)."
+          echo "Skipping installation on macOS (exact version present)."
         else
-          log "Uninstalling any existing PowerShell…"
+          echo "Uninstalling any existing PowerShell…"
           sudo rm -rf /usr/local/microsoft/powershell || true
           sudo rm -f /usr/local/bin/pwsh || true
-          log "Installing PowerShell $REQUESTED_VERSION…"
+          echo "Installing PowerShell $REQUESTED_VERSION…"
           curl -sSL https://aka.ms/install-powershell.sh | sudo bash -s -- -Version "$REQUESTED_VERSION" -Destination /usr/local
         fi
 
@@ -105,15 +104,11 @@ runs:
         REINSTALL: ${{ inputs.Reinstall }}
       shell: powershell
       run: |
-        function Log($Message) {
-          Write-Host "::notice title=pwsh-installer::[$([DateTime]::UtcNow.ToString('u'))] $Message"
-        }
-
-        Log "Detecting existing PowerShell on Windows…"
+        Write-Host "Detecting existing PowerShell on Windows…"
         try { $detected = (pwsh -NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.ToString()") } catch { $detected = $null }
-        Log "Detected version: $($detected ?? '<none>')"
-        Log "Requested version: $env:REQUESTED_VERSION"
-        Log "Reinstall flag: $env:REINSTALL"
+        Write-Host "Detected version: $($detected ?? '<none>')"
+        Write-Host "Requested version: $env:REQUESTED_VERSION"
+        Write-Host "Reinstall flag: $env:REINSTALL"
 
         if (-not $detected) {
           $decision = 'install'
@@ -122,15 +117,15 @@ runs:
         } else {
           $decision = 'uninstall-install'
         }
-        Log "Decision: $decision"
+        Write-Host "Decision: $decision"
 
         if ($decision -eq 'skip') {
-          Log 'Skipping installation on Windows (exact version present).'
+          Write-Host 'Skipping installation on Windows (exact version present).'
         }
         else {
-          Log 'Uninstalling any existing PowerShell…'
+          Write-Host 'Uninstalling any existing PowerShell…'
           winget uninstall --id Microsoft.PowerShell -e --silent | Out-Null
-          Log "Installing PowerShell $env:REQUESTED_VERSION…"
+          Write-Host "Installing PowerShell $env:REQUESTED_VERSION…"
           $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
           $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
           Invoke-WebRequest $url -OutFile $msi
