@@ -19,17 +19,6 @@ runs:
       run: |
         $version = '${{ inputs.version }}'
 
-        # Try to remove existing PowerShell installation
-        try {
-          # Find existing PowerShell installations to remove
-          Get-Package -Name "PowerShell*" -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "Uninstalling $($_.Name) version $($_.Version)"
-            Uninstall-Package -Name $_.Name -Force -ErrorAction SilentlyContinue
-          }
-        } catch {
-          Write-Host "Error removing existing PowerShell: $_"
-        }
-
         # Get the version to install
         if ([string]::IsNullOrWhiteSpace($version)) {
           # Get latest version from GitHub API
@@ -40,48 +29,108 @@ runs:
           Write-Host "Installing specified PowerShell version: $version"
         }
 
-        # Download and install PowerShell
-        $msiName = "PowerShell-$version-win-x64.msi"
-        $downloadUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$version/$msiName"
+        # Check if PowerShell is already installed and compare versions
+        $needToInstall = $true
+        try {
+          $currentInstall = Get-Package -Name "PowerShell*" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($currentInstall) {
+            $currentVersion = $currentInstall.Version
+            Write-Host "Current PowerShell version: $currentVersion"
 
-        Write-Host "Downloading from $downloadUrl"
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $msiName
+            # Compare versions
+            if ([System.Version]$currentVersion -ge [System.Version]$version) {
+              Write-Host "Current version is greater than or equal to target version. Skipping installation."
+              $needToInstall = $false
+            } else {
+              Write-Host "Current version is lower than target version. Will upgrade."
 
-        Write-Host "Installing PowerShell $version"
-        Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $msiName, "/quiet", "/norestart" -Wait
+              # Uninstall current version
+              Write-Host "Uninstalling $($currentInstall.Name) version $($currentInstall.Version)"
+              Uninstall-Package -Name $currentInstall.Name -Force -ErrorAction SilentlyContinue
+            }
+          } else {
+            Write-Host "PowerShell Core not found. Will install version $version"
+          }
+        } catch {
+          Write-Host "Error checking current PowerShell version: $_"
+        }
 
-        # Verify installation
-        $pwshPath = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
-        if (Test-Path $pwshPath) {
-          Write-Host "PowerShell installed successfully:"
-          & $pwshPath -Command '$PSVersionTable'
-        } else {
-          Write-Error "PowerShell installation failed. Could not find $pwshPath"
-          exit 1
+        if ($needToInstall) {
+          # Download and install PowerShell
+          $msiName = "PowerShell-$version-win-x64.msi"
+          $downloadUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$version/$msiName"
+
+          Write-Host "Downloading from $downloadUrl"
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $msiName
+
+          Write-Host "Installing PowerShell $version"
+          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $msiName, "/quiet", "/norestart" -Wait
+
+          # Verify installation
+          $pwshPath = "$env:ProgramFiles\PowerShell\7\pwsh.exe"
+          if (Test-Path $pwshPath) {
+            Write-Host "PowerShell installed successfully:"
+            & $pwshPath -Command '$PSVersionTable'
+          } else {
+            Write-Error "PowerShell installation failed. Could not find $pwshPath"
+            exit 1
+          }
         }
 
     - name: Install PowerShell on Ubuntu
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        sudo apt-get remove powershell -y
         version='${{ inputs.version }}'
         if [ -z "$version" ]; then
+          # Get latest version if not specified
           version=$(curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep 'tag_name' | cut -d '"' -f 4)
+          echo "Latest PowerShell version: $version"
         else
           version="v$version"
+          echo "Installing specified PowerShell version: $version"
         fi
-        wget https://github.com/PowerShell/PowerShell/releases/download/$version/powershell_${version#v}-1.deb_amd64.deb
-        sudo dpkg -i powershell_${version#v}-1.deb_amd64.deb
-        sudo apt-get install -f
+
+        # Strip the 'v' prefix for version comparison
+        clean_version=${version#v}
+
+        # Check if PowerShell is already installed and get current version
+        need_to_install=true
+        if command -v pwsh &> /dev/null; then
+          current_version=$(pwsh -c '$PSVersionTable.PSVersion.ToString()' | tr -d '\r\n')
+          echo "Current PowerShell version: $current_version"
+
+          # Compare versions
+          if [ "$(printf '%s\n' "$clean_version" "$current_version" | sort -V | head -n1)" != "$clean_version" ]; then
+            echo "Current version $current_version is greater than or equal to target version $clean_version. Skipping installation."
+            need_to_install=false
+          else
+            echo "Current version $current_version is lower than target version $clean_version. Will upgrade."
+            sudo apt-get remove powershell -y
+          fi
+        else
+          echo "PowerShell is not installed. Will install version $clean_version"
+        fi
+
+        if [ "$need_to_install" = true ]; then
+          wget https://github.com/PowerShell/PowerShell/releases/download/$version/powershell_${clean_version}-1.deb_amd64.deb
+          sudo dpkg -i powershell_${clean_version}-1.deb_amd64.deb
+          sudo apt-get install -f
+
+          # Verify installation
+          if command -v pwsh &> /dev/null; then
+            echo "PowerShell installed successfully:"
+            pwsh -c '$PSVersionTable'
+          else
+            echo "ERROR: PowerShell installation failed."
+            exit 1
+          fi
+        fi
 
     - name: Install PowerShell on macOS
       if: runner.os == 'macOS'
       shell: bash
       run: |
-        # Clean up existing PowerShell installation
-        sudo rm -rf /usr/local/microsoft/powershell
-
         # Get version information
         version='${{ inputs.version }}'
         if [ -z "$version" ]; then
@@ -96,58 +145,79 @@ runs:
         # The version without 'v' prefix
         clean_version=${version#v}
 
-        # Try the different naming patterns for the macOS package
-        pkg_patterns=(
-          "powershell-$clean_version-osx-x64.pkg"
-          "powershell-$clean_version-osx-arm64.pkg"
-          "powershell-$clean_version-osx.pkg"
-        )
+        # Check if PowerShell is already installed and get current version
+        need_to_install=true
+        if [ -f "/usr/local/bin/pwsh" ]; then
+          current_version=$(/usr/local/bin/pwsh -c '$PSVersionTable.PSVersion.ToString()' | tr -d '\r\n')
+          echo "Current PowerShell version: $current_version"
 
-        # Determine if running on Apple Silicon or Intel
-        if [ "$(uname -m)" = "arm64" ]; then
-          echo "Detected Apple Silicon (ARM64)"
-          arch="arm64"
-        else
-          echo "Detected Intel CPU (x64)"
-          arch="x64"
-        fi
-
-        # Try to download the appropriate package based on architecture
-        download_success=false
-
-        for pkg_name in "${pkg_patterns[@]}"; do
-          echo "Trying to download $pkg_name..."
-          url="https://github.com/PowerShell/PowerShell/releases/download/$version/$pkg_name"
-
-          # Try to download the file
-          if curl -LO $url --fail; then
-            echo "Successfully downloaded $pkg_name"
-            download_success=true
-            break
+          # Compare versions
+          if [ "$(printf '%s\n' "$clean_version" "$current_version" | sort -V | head -n1)" != "$clean_version" ]; then
+            echo "Current version $current_version is greater than or equal to target version $clean_version. Skipping installation."
+            need_to_install=false
           else
-            echo "Failed to download $pkg_name"
+            echo "Current version $current_version is lower than target version $clean_version. Will upgrade."
+            # Clean up existing PowerShell installation
+            sudo rm -rf /usr/local/microsoft/powershell
           fi
-        done
-
-        if [ "$download_success" = false ]; then
-          echo "ERROR: Could not download PowerShell package for macOS. Please check version and available packages."
-          exit 1
+        else
+          echo "PowerShell is not installed. Will install version $clean_version"
         fi
 
-        # Verify the file exists before installation
-        if [ -f "$pkg_name" ]; then
-          echo "Installing PowerShell package: $pkg_name"
-          sudo installer -pkg "$pkg_name" -target /
+        if [ "$need_to_install" = true ]; then
+          # Try the different naming patterns for the macOS package
+          pkg_patterns=(
+            "powershell-$clean_version-osx-x64.pkg"
+            "powershell-$clean_version-osx-arm64.pkg"
+            "powershell-$clean_version-osx.pkg"
+          )
 
-          # Verify the installation
-          if [ -f "/usr/local/bin/pwsh" ]; then
-            echo "PowerShell installed successfully:"
-            /usr/local/bin/pwsh -Command '$PSVersionTable'
+          # Determine if running on Apple Silicon or Intel
+          if [ "$(uname -m)" = "arm64" ]; then
+            echo "Detected Apple Silicon (ARM64)"
+            arch="arm64"
           else
-            echo "ERROR: PowerShell installation failed. Could not find /usr/local/bin/pwsh"
+            echo "Detected Intel CPU (x64)"
+            arch="x64"
+          fi
+
+          # Try to download the appropriate package based on architecture
+          download_success=false
+
+          for pkg_name in "${pkg_patterns[@]}"; do
+            echo "Trying to download $pkg_name..."
+            url="https://github.com/PowerShell/PowerShell/releases/download/$version/$pkg_name"
+
+            # Try to download the file
+            if curl -LO $url --fail; then
+              echo "Successfully downloaded $pkg_name"
+              download_success=true
+              break
+            else
+              echo "Failed to download $pkg_name"
+            fi
+          done
+
+          if [ "$download_success" = false ]; then
+            echo "ERROR: Could not download PowerShell package for macOS. Please check version and available packages."
             exit 1
           fi
-        else
-          echo "ERROR: Downloaded package file not found: $pkg_name"
-          exit 1
+
+          # Verify the file exists before installation
+          if [ -f "$pkg_name" ]; then
+            echo "Installing PowerShell package: $pkg_name"
+            sudo installer -pkg "$pkg_name" -target /
+
+            # Verify the installation
+            if [ -f "/usr/local/bin/pwsh" ]; then
+              echo "PowerShell installed successfully:"
+              /usr/local/bin/pwsh -Command '$PSVersionTable'
+            else
+              echo "ERROR: PowerShell installation failed. Could not find /usr/local/bin/pwsh"
+              exit 1
+            fi
+          else
+            echo "ERROR: Downloaded package file not found: $pkg_name"
+            exit 1
+          fi
         fi
