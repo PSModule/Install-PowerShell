@@ -97,4 +97,4 @@ runs:
         $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
         $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
         Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
-        Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart', '/force' -Wait
+        Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart', 'REINSTALL=ALL' -Wait
