@@ -1,48 +1,59 @@
-name: {{ NAME }}
-description: {{ DESCRIPTION }}
+name: Install-PowerShell
+description: Install PowerShell
 author: PSModule
 branding:
   icon: upload-cloud
   color: white
 
 inputs:
-  subject:
-    description: The subject to greet
-    required: false
-    default: World
-  Debug:
-    description: Enable debug output.
-    required: false
-    default: 'false'
-  Verbose:
-    description: Enable verbose output.
-    required: false
-    default: 'false'
   Version:
-    description: Specifies the version of the GitHub module to be installed. The value must be an exact version.
+    description: The version of PowerShell to install, i.e. 7.4.0 or 7.5.0. If not provided it, latest version is installed.
     required: false
-  Prerelease:
-    description: Allow prerelease versions if available.
-    required: false
-    default: 'false'
-  WorkingDirectory:
-    description: The working directory where the script will run from.
-    required: false
-    default: ${{ github.workspace }}
+    default: ''
 
 runs:
   using: composite
   steps:
-    - name: {{ NAME }}
-      uses: PSModule/GitHub-Script@v1
-      env:
-        {{ ORG }}_{{ NAME }}_INPUT_subject: ${{ inputs.subject }}
-      with:
-        Debug: ${{ inputs.Debug }}
-        Prerelease: ${{ inputs.Prerelease }}
-        Verbose: ${{ inputs.Verbose }}
-        Version: ${{ inputs.Version }}
-        WorkingDirectory: ${{ inputs.WorkingDirectory }}
-        Script: |
-          # {{ NAME }}
-          ${{ github.action_path }}/scripts/main.ps1
+    - name: Install PowerShell on Windows
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $version = '${{ inputs.version }}'
+        winget uninstall --id Microsoft.PowerShell --accept-source-agreements --accept-package-agreements
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements
+        }
+        else {
+            winget install --id Microsoft.PowerShell --version $version --source winget --accept-package-agreements --accept-source-agreements
+        }
+
+    - name: Install PowerShell on Ubuntu
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get remove powershell -y
+        version='${{ inputs.version }}'
+        if [ -z "$version" ]; then
+          version=$(curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep 'tag_name' | cut -d '"' -f 4)
+        else
+          version="v$version"
+        fi
+        wget https://github.com/PowerShell/PowerShell/releases/download/$version/powershell_${version#v}-1.deb_amd64.deb
+        sudo dpkg -i powershell_${version#v}-1.deb_amd64.deb
+        sudo apt-get install -f
+
+    - name: Install PowerShell on macOS
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/local/microsoft/powershell
+        version='${{ inputs.version }}'
+        if [ -z "$version" ]; then
+          version=$(curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep 'tag_name' | cut -d '"' -f 4)
+        else
+          version="v$version"
+        fi
+        pkg="powershell-${version#v}-osx.pkg"
+        url="https://github.com/PowerShell/PowerShell/releases/download/$version/$pkg"
+        curl -LO $url
+        sudo installer -pkg $pkg -target /
