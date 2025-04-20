@@ -16,15 +16,11 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Set shared env
-      shell: bash
-      run: |
-        echo "REQUESTED_VERSION=${{ inputs.Version }}" >> $GITHUB_ENV
-        echo "REINSTALL=${{ inputs.Reinstall }}" >> $GITHUB_ENV
-
     - name: Install PowerShell (Linux)
       if: runner.os == 'Linux'
-      id: linux
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        REINSTALL: ${{ inputs.Reinstall }}
       shell: bash
       run: |
         set -e
@@ -63,7 +59,9 @@ runs:
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
-      id: macos
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        REINSTALL: ${{ inputs.Reinstall }}
       shell: bash
       run: |
         set -e
@@ -102,7 +100,9 @@ runs:
 
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
-      id: windows
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        REINSTALL: ${{ inputs.Reinstall }}
       shell: powershell
       run: |
         function Log($Message) {
