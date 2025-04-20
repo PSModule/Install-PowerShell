@@ -34,3 +34,11 @@ jobs:
         uses: ./
         with:
           Version: ${{ matrix.version }}
+
+      - name: Test version
+        shell: pwsh
+        run: |
+          $PSVersionTable | Format-Table -AutoSize
+          if ($PSVersionTable.PSVersion -ne '${{ matrix.version }}') {
+              throw "Failed to install the expected version"
+          }
