@@ -26,6 +26,8 @@ runs:
           $version = $releaseInfo.tag_name.Trim('v')
           Write-Host "Latest PowerShell version: $version"
         } else {
+          # Remove the 'v' prefix if it exists
+          $version = $version.TrimStart('v')
           Write-Host "Installing specified PowerShell version: $version"
         }
 
