@@ -81,10 +81,12 @@ runs:
       shell: powershell
       run: |
         try {
-          $detected = (& pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+          $detected = (pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
         } catch {
           $detected = $null
         }
+
+        Write-Host "Detected PowerShell version: $detected"
 
         if ($detected -eq $env:REQUESTED_VERSION) {
           Write-Host "PowerShell $detected already installed. Skipping."
