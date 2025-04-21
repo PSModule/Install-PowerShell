@@ -33,9 +33,8 @@ runs:
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
                 REQUESTED_VERSION=$(
-                  curl -sf https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-                    grep '"tag_name"' | head -n1 |
-                    sed -E 's/.*"v?([^"]+)".*/\1/'
+                  curl -s -f https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                    jq -r '.tag_name' | sed 's/^v//'
                 )
                 echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
                 ;;
@@ -96,9 +95,8 @@ runs:
         # Only resolve to latest version if explicitly set to 'latest'
         if [[ "$REQ_VER_LOWER" == "latest" ]]; then
           REQUESTED_VERSION=$(
-            curl -sf https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-            grep '"tag_name"' | head -n1 |
-            sed -E 's/.*"v?([^"]+)".*/\1/'
+            curl -s -f https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+              jq -r '.tag_name' | sed 's/^v//'
           )
           echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
         fi
