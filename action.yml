@@ -162,6 +162,7 @@ runs:
       shell: powershell
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         Write-Host  "Requested version: [$REQUESTED_VERSION]"
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
