@@ -1,48 +1,203 @@
-name: {{ NAME }}
-description: {{ DESCRIPTION }}
+name: Install PowerShell
+description: |
+  Install a specific version —or the latest stable version— of PowerShell Core
+  on any GitHub runner (Linux, macOS, Windows).
+  Skips the install if the requested version is already present.
 author: PSModule
 branding:
-  icon: upload-cloud
-  color: white
+  icon: terminal
+  color: purple
 
 inputs:
-  subject:
-    description: The subject to greet
-    required: false
-    default: World
-  Debug:
-    description: Enable debug output.
-    required: false
-    default: 'false'
-  Verbose:
-    description: Enable verbose output.
-    required: false
-    default: 'false'
   Version:
-    description: Specifies the version of the GitHub module to be installed. The value must be an exact version.
+    description: |
+      PowerShell version to install (e.g. `7.4.1`).
+      Defaults to install the latest stable release.
     required: false
-  Prerelease:
-    description: Allow prerelease versions if available.
-    required: false
-    default: 'false'
-  WorkingDirectory:
-    description: The working directory where the script will run from.
-    required: false
-    default: ${{ github.workspace }}
+    default: 'latest'
 
 runs:
   using: composite
   steps:
-    - name: {{ NAME }}
-      uses: PSModule/GitHub-Script@v1
+    - name: Install PowerShell (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
       env:
-        {{ ORG }}_{{ NAME }}_INPUT_subject: ${{ inputs.subject }}
-      with:
-        Debug: ${{ inputs.Debug }}
-        Prerelease: ${{ inputs.Prerelease }}
-        Verbose: ${{ inputs.Verbose }}
-        Version: ${{ inputs.Version }}
-        WorkingDirectory: ${{ inputs.WorkingDirectory }}
-        Script: |
-          # {{ NAME }}
-          ${{ github.action_path }}/scripts/main.ps1
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -e
+
+        echo "Requested version: [$REQUESTED_VERSION]"
+
+        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
+        case "${REQUESTED_VERSION:-}" in
+            [Ll][Aa][Tt][Ee][Ss][Tt])
+                REQUESTED_VERSION=$(
+                  curl -s -f \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                    jq -r '.tag_name' | sed 's/^v//'
+                )
+                echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                ;;
+            "")
+                echo "Error: Version input is required (or use 'latest')"
+                exit 1
+                ;;
+        esac
+
+        DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
+          echo "PowerShell $DETECTED_VERSION already installed. Skipping."
+          exit 0
+        fi
+
+        if command -v apt-get >/dev/null; then
+          echo "Using APT package manager (Debian/Ubuntu)..."
+
+          if ! grep -q "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
+            wget -qO- https://packages.microsoft.com/keys/microsoft.asc \
+              | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+            DIST_CODENAME=$(lsb_release -cs)
+            sudo add-apt-repository \
+              "deb [arch=$(dpkg --print-architecture)] https://packages.microsoft.com/ubuntu/$DIST_CODENAME/prod $DIST_CODENAME main"
+          fi
+
+          sudo apt-get update -y
+          EXACT_PKG=$(apt-cache madison powershell | awk '{print $3}' \
+            | grep -E "^${REQUESTED_VERSION}(-|$)" | head -n1 || true)
+
+          if [[ -n "$EXACT_PKG" ]]; then
+            sudo apt-get install -y powershell=$EXACT_PKG
+          else
+            ARCH=$(dpkg --print-architecture)
+            DEB_NAME="powershell_${REQUESTED_VERSION}-1.deb_${ARCH}.deb"
+            URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
+            wget -q "$URL" -O "$DEB_NAME"
+            sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
+          fi
+        else
+          echo "Unsupported Linux distribution (no apt-get)."
+          exit 1
+        fi
+
+    - name: Install PowerShell (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -e
+
+        echo "Requested version: [$REQUESTED_VERSION]"
+
+        # Convert to lowercase for comparison (macOS-compatible method)
+        REQ_VER_LOWER=$(echo "$REQUESTED_VERSION" | tr '[:upper:]' '[:lower:]')
+
+        # Only resolve to latest version if explicitly set to 'latest'
+        if [[ "$REQ_VER_LOWER" == "latest" ]]; then
+          REQUESTED_VERSION=$(
+            curl -s -f \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+              jq -r '.tag_name' | sed 's/^v//'
+          )
+          echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+        fi
+
+        # Validate REQUESTED_VERSION is not empty
+        if [[ -z "${REQUESTED_VERSION}" ]]; then
+          echo "Error: Could not determine a valid PowerShell version."
+          exit 1
+        fi
+
+        DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
+          echo "PowerShell $DETECTED_VERSION already installed. Skipping."
+          exit 0
+        fi
+
+        # Try Homebrew first (simplified approach)
+        if command -v brew >/dev/null; then
+          echo "Using Homebrew package manager..."
+          # Homebrew handles 'latest' automatically when no version is specified
+          if [[ "$REQ_VER_LOWER" == "latest" ]]; then
+            brew install --cask powershell
+          else
+            # Try specific version formula first
+            if brew install --cask "powershell@$REQUESTED_VERSION" 2>/dev/null; then
+              echo "Successfully installed via Homebrew"
+            else
+              # Fall back to generic formula if versioned one doesn't exist
+              echo "Version-specific formula not found, installing latest via Homebrew"
+              brew install --cask powershell
+            fi
+          fi
+        else
+          # Fall back to direct download
+          echo "Homebrew not available, downloading directly..."
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            "arm64") PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg" ;;
+            *)       PKG_NAME="powershell-${REQUESTED_VERSION}-osx-x64.pkg" ;;
+          esac
+
+          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
+          echo "Downloading from: $URL"
+          if ! curl -sSL "$URL" -o "$PKG_NAME"; then
+            echo "Error: Failed to download PowerShell package"
+            exit 1
+          fi
+          sudo installer -pkg "$PKG_NAME" -target /
+        fi
+
+    - name: Install PowerShell (Windows)
+      if: runner.os == 'Windows'
+      shell: powershell
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        Write-Host  "Requested version: [$REQUESTED_VERSION]"
+        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
+        $req = $env:REQUESTED_VERSION
+        if ($req -and $req.Trim().ToLower() -eq 'latest') {
+            $latest = (
+              Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
+              -Headers @{
+                'Accept' = 'application/vnd.github+json'
+                'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
+                'X-GitHub-Api-Version' = '2022-11-28'
+              }
+            ).tag_name.TrimStart('v')
+            Write-Host "Latest stable PowerShell release detected: $latest"
+            $env:REQUESTED_VERSION = $latest
+        } elseif ([string]::IsNullOrWhiteSpace($req)) {
+            Write-Host "Error: Version input is required (or use 'latest')"
+            exit 1
+        }
+
+        try {
+          $detected = (pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+        } catch {
+          $detected = $null
+        }
+
+        Write-Host "Detected PowerShell version: $detected"
+        Write-Host "Requested PowerShell version: $env:REQUESTED_VERSION"
+
+        if ($detected -eq $env:REQUESTED_VERSION) {
+          Write-Host "PowerShell $detected already installed. Skipping."
+          exit 0
+        }
+
+        $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
+        $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
+        Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
+        Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
