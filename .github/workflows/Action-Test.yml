@@ -36,6 +36,8 @@ jobs:
 
       - name: Verify installed version
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # Requested version that came from the matrix
           $requested = '${{ matrix.version }}'
@@ -44,9 +46,14 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($requested) -or
               $requested.Trim().ToLower() -in @('latest','null')) {
 
-              $requested = (Invoke-RestMethod `
-                              -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
-                           ).tag_name.TrimStart('v')
+              $requested = (
+                Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
+                -Headers @{
+                  'Accept' = 'application/vnd.github+json'
+                  'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
+                  'X-GitHub-Api-Version' = '2022-11-28'
+                }
+              ).tag_name.TrimStart('v')
               Write-Host "Resolved 'latest' → $requested"
           }
 
