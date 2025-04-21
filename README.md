@@ -50,6 +50,7 @@ This action does **not** generate any outputs.
   (`pwsh -Command $($PSVersionTable.PSVersion)`). If it matches, the step ends immediately.
 
 * **Platform‑specific installers**
+
   | Runner OS | Install strategy |
   | --------- | ---------------- |
   | **Linux** (Debian/Ubuntu‑based) | Uses APT if available; otherwise downloads the `.deb` asset directly from the release page and installs with `dpkg`. |
