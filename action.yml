@@ -1,5 +1,5 @@
 name: Install PowerShell
-description: >
+description: |
   Install a specific version —or the latest stable version— of PowerShell Core
   on any GitHub runner (Linux, macOS, Windows).
   Skips the install if the requested version is already present.
@@ -10,9 +10,9 @@ branding:
 
 inputs:
   Version:
-    description: >
+    description: |
       PowerShell version to install (e.g. `7.4.1`).
-      Set to 'latest' to automatically install the newest stable release.
+      Defaults to install the latest stable release.
     required: false
     default: 'latest'
 
