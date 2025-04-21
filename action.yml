@@ -24,6 +24,7 @@ runs:
       shell: bash
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -e
 
@@ -33,7 +34,11 @@ runs:
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
                 REQUESTED_VERSION=$(
-                  curl -s -f https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                  curl -s -f \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
                     jq -r '.tag_name' | sed 's/^v//'
                 )
                 echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
@@ -84,6 +89,7 @@ runs:
       shell: bash
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -e
 
@@ -95,7 +101,11 @@ runs:
         # Only resolve to latest version if explicitly set to 'latest'
         if [[ "$REQ_VER_LOWER" == "latest" ]]; then
           REQUESTED_VERSION=$(
-            curl -s -f https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+            curl -s -f \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
               jq -r '.tag_name' | sed 's/^v//'
           )
           echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
@@ -157,7 +167,14 @@ runs:
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         $req = $env:REQUESTED_VERSION
         if ($req -and $req.Trim().ToLower() -eq 'latest') {
-            $latest = (Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest').tag_name.TrimStart('v')
+            $latest = (
+              Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
+              -Headers @{
+                'Accept' = 'application/vnd.github+json'
+                'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
+                'X-GitHub-Api-Version' = '2022-11-28'
+              }
+            ).tag_name.TrimStart('v')
             Write-Host "Latest stable PowerShell release detected: $latest"
             $env:REQUESTED_VERSION = $latest
         } elseif ([string]::IsNullOrWhiteSpace($req)) {
