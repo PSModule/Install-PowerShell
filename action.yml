@@ -72,7 +72,9 @@ runs:
           URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$DEB_NAME"
+          echo "Starting installation of PowerShell [$REQUESTED_VERSION)]..."
           sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
+          echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
         elif command -v rpm >/dev/null; then
           # RHEL/Fedora/CentOS based
           echo "Detected RHEL/Fedora/CentOS based system..."
@@ -86,11 +88,14 @@ runs:
           URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${RPM_NAME}"
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$RPM_NAME"
+          echo "Starting installation of PowerShell [$REQUESTED_VERSION)]..."
           sudo rpm -i "$RPM_NAME" || sudo yum install -y "$RPM_NAME"
+          echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
         else
           echo "Unsupported Linux distribution. Cannot determine package format."
           exit 1
         fi
+        echo "PowerShell [$REQUESTED_VERSION] installed successfully."
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
