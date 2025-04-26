@@ -22,10 +22,12 @@ runs:
     - name: Install PowerShell (Linux)
       if: runner.os == 'Linux'
       shell: bash
+      working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         GITHUB_TOKEN: ${{ github.token }}
       run: |
+        # Install-PowerShell
         set -e
 
         echo "Requested version: [$REQUESTED_VERSION]"
@@ -50,121 +52,127 @@ runs:
         esac
 
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ -n "$DETECTED_VERSION" ]]; then
+          echo "Currently installed PowerShell version: $DETECTED_VERSION"
+        else
+          echo "PowerShell is not currently installed"
+        fi
+
         if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
           echo "PowerShell $DETECTED_VERSION already installed. Skipping."
           exit 0
         fi
 
-        if command -v apt-get >/dev/null; then
-          echo "Using APT package manager (Debian/Ubuntu)..."
+        # Determine Linux distribution type
+        ARCH=$(dpkg --print-architecture 2>/dev/null || rpm --eval '%{_arch}' 2>/dev/null || echo "x86_64")
 
-          if ! grep -q "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
-            wget -qO- https://packages.microsoft.com/keys/microsoft.asc \
-              | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
-            DIST_CODENAME=$(lsb_release -cs)
-            sudo add-apt-repository \
-              "deb [arch=$(dpkg --print-architecture)] https://packages.microsoft.com/ubuntu/$DIST_CODENAME/prod $DIST_CODENAME main"
-          fi
+        if command -v apt-get >/dev/null || command -v dpkg >/dev/null; then
+          # Debian/Ubuntu based
+          echo "Detected Debian/Ubuntu based system..."
+          DEB_NAME="powershell_${REQUESTED_VERSION}-1.deb_${ARCH}.deb"
+          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
+          echo "Downloading from: $URL"
+          wget -q "$URL" -O "$DEB_NAME"
+          echo "Starting installation of PowerShell [$REQUESTED_VERSION)]..."
+          sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
+          echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
+        elif command -v rpm >/dev/null; then
+          # RHEL/Fedora/CentOS based
+          echo "Detected RHEL/Fedora/CentOS based system..."
 
-          sudo apt-get update -y
-          EXACT_PKG=$(apt-cache madison powershell | awk '{print $3}' \
-            | grep -E "^${REQUESTED_VERSION}(-|$)" | head -n1 || true)
-
-          if [[ -n "$EXACT_PKG" ]]; then
-            sudo apt-get install -y powershell=$EXACT_PKG
+          if [[ "$ARCH" == "aarch64" ]]; then
+            RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.${ARCH}.rpm"
           else
-            ARCH=$(dpkg --print-architecture)
-            DEB_NAME="powershell_${REQUESTED_VERSION}-1.deb_${ARCH}.deb"
-            URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
-            wget -q "$URL" -O "$DEB_NAME"
-            sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
+            RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.x86_64.rpm"
           fi
+
+          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${RPM_NAME}"
+          echo "Downloading from: $URL"
+          wget -q "$URL" -O "$RPM_NAME"
+          echo "Starting installation of PowerShell [$REQUESTED_VERSION)]..."
+          sudo rpm -i "$RPM_NAME" || sudo yum install -y "$RPM_NAME"
+          echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
         else
-          echo "Unsupported Linux distribution (no apt-get)."
+          echo "Unsupported Linux distribution. Cannot determine package format."
           exit 1
         fi
+        echo "PowerShell [$REQUESTED_VERSION] installed successfully."
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
       shell: bash
+      working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         GITHUB_TOKEN: ${{ github.token }}
       run: |
+        # Install-PowerShell
         set -e
 
         echo "Requested version: [$REQUESTED_VERSION]"
 
-        # Convert to lowercase for comparison (macOS-compatible method)
-        REQ_VER_LOWER=$(echo "$REQUESTED_VERSION" | tr '[:upper:]' '[:lower:]')
-
-        # Only resolve to latest version if explicitly set to 'latest'
-        if [[ "$REQ_VER_LOWER" == "latest" ]]; then
-          REQUESTED_VERSION=$(
-            curl -s -f \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-              jq -r '.tag_name' | sed 's/^v//'
-          )
-          echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
-        fi
-
-        # Validate REQUESTED_VERSION is not empty
-        if [[ -z "${REQUESTED_VERSION}" ]]; then
-          echo "Error: Could not determine a valid PowerShell version."
-          exit 1
-        fi
+        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
+        case "${REQUESTED_VERSION:-}" in
+            [Ll][Aa][Tt][Ee][Ss][Tt])
+                REQUESTED_VERSION=$(
+                  curl -s -f \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                    jq -r '.tag_name' | sed 's/^v//'
+                )
+                echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                ;;
+            "")
+                echo "Error: Version input is required (or use 'latest')"
+                exit 1
+                ;;
+        esac
 
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ -n "$DETECTED_VERSION" ]]; then
+          echo "Currently installed PowerShell version: $DETECTED_VERSION"
+        else
+          echo "PowerShell is not currently installed"
+        fi
+
         if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
           echo "PowerShell $DETECTED_VERSION already installed. Skipping."
           exit 0
         fi
 
-        # Try Homebrew first (simplified approach)
-        if command -v brew >/dev/null; then
-          echo "Using Homebrew package manager..."
-          # Homebrew handles 'latest' automatically when no version is specified
-          if [[ "$REQ_VER_LOWER" == "latest" ]]; then
-            brew install --cask powershell
-          else
-            # Try specific version formula first
-            if brew install --cask "powershell@$REQUESTED_VERSION" 2>/dev/null; then
-              echo "Successfully installed via Homebrew"
-            else
-              # Fall back to generic formula if versioned one doesn't exist
-              echo "Version-specific formula not found, installing latest via Homebrew"
-              brew install --cask powershell
-            fi
-          fi
-        else
-          # Fall back to direct download
-          echo "Homebrew not available, downloading directly..."
-          ARCH=$(uname -m)
-          case "$ARCH" in
-            "arm64") PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg" ;;
-            *)       PKG_NAME="powershell-${REQUESTED_VERSION}-osx-x64.pkg" ;;
-          esac
+        # Determine architecture and download appropriate package
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          "arm64") PKG_NAME="powershell-${REQUESTED_VERSION}-osx-arm64.pkg" ;;
+          *)       PKG_NAME="powershell-${REQUESTED_VERSION}-osx-x64.pkg" ;;
+        esac
 
-          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
-          echo "Downloading from: $URL"
-          if ! curl -sSL "$URL" -o "$PKG_NAME"; then
-            echo "Error: Failed to download PowerShell package"
-            exit 1
-          fi
-          sudo installer -pkg "$PKG_NAME" -target /
+        URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
+        echo "Downloading from: $URL"
+
+        echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
+
+        if ! curl -sSL "$URL" -o "$PKG_NAME"; then
+          echo "Error: Failed to download PowerShell package"
+          exit 1
         fi
+        sudo installer -pkg "$PKG_NAME" -target /
+
+        echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
 
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
       shell: powershell
+      working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         GITHUB_TOKEN: ${{ github.token }}
       run: |
-        Write-Host  "Requested version: [$REQUESTED_VERSION]"
+        # Install-PowerShell
+        Write-Host "Requested version: [$env:REQUESTED_VERSION]"
+
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         $req = $env:REQUESTED_VERSION
         if ($req -and $req.Trim().ToLower() -eq 'latest') {
@@ -185,12 +193,11 @@ runs:
 
         try {
           $detected = (pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+          Write-Host "Currently installed PowerShell version: $detected"
         } catch {
+          Write-Host "PowerShell is not currently installed"
           $detected = $null
         }
-
-        Write-Host "Detected PowerShell version: $detected"
-        Write-Host "Requested PowerShell version: $env:REQUESTED_VERSION"
 
         if ($detected -eq $env:REQUESTED_VERSION) {
           Write-Host "PowerShell $detected already installed. Skipping."
@@ -199,5 +206,14 @@ runs:
 
         $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
         $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
-        Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
+        Write-Host "Downloading from: $url"
+
+        Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)]..."
+
+        if (-not (Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -PassThru)) {
+          Write-Host "Error: Failed to download PowerShell package"
+          exit 1
+        }
         Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
+
+        Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now available."
