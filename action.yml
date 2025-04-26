@@ -22,6 +22,7 @@ runs:
     - name: Install PowerShell (Linux)
       if: runner.os == 'Linux'
       shell: bash
+      working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         GITHUB_TOKEN: ${{ github.token }}
@@ -94,6 +95,7 @@ runs:
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
       shell: bash
+      working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         GITHUB_TOKEN: ${{ github.token }}
@@ -151,6 +153,7 @@ runs:
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
       shell: powershell
+      working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         GITHUB_TOKEN: ${{ github.token }}
