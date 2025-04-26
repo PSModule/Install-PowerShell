@@ -50,6 +50,12 @@ runs:
         esac
 
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ -n "$DETECTED_VERSION" ]]; then
+          echo "Currently installed PowerShell version: $DETECTED_VERSION"
+        else
+          echo "PowerShell is not currently installed"
+        fi
+
         if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
           echo "PowerShell $DETECTED_VERSION already installed. Skipping."
           exit 0
@@ -116,6 +122,12 @@ runs:
         esac
 
         DETECTED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ -n "$DETECTED_VERSION" ]]; then
+          echo "Currently installed PowerShell version: $DETECTED_VERSION"
+        else
+          echo "PowerShell is not currently installed"
+        fi
+
         if [[ "$DETECTED_VERSION" == "$REQUESTED_VERSION" ]]; then
           echo "PowerShell $DETECTED_VERSION already installed. Skipping."
           exit 0
@@ -143,7 +155,8 @@ runs:
         REQUESTED_VERSION: ${{ inputs.Version }}
         GITHUB_TOKEN: ${{ github.token }}
       run: |
-        Write-Host  "Requested version: [$REQUESTED_VERSION]"
+        Write-Host "Requested version: [$env:REQUESTED_VERSION]"
+
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         $req = $env:REQUESTED_VERSION
         if ($req -and $req.Trim().ToLower() -eq 'latest') {
@@ -164,12 +177,11 @@ runs:
 
         try {
           $detected = (pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+          Write-Host "Currently installed PowerShell version: $detected"
         } catch {
+          Write-Host "PowerShell is not currently installed"
           $detected = $null
         }
-
-        Write-Host "Detected PowerShell version: $detected"
-        Write-Host "Requested PowerShell version: $env:REQUESTED_VERSION"
 
         if ($detected -eq $env:REQUESTED_VERSION) {
           Write-Host "PowerShell $detected already installed. Skipping."
@@ -178,5 +190,9 @@ runs:
 
         $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
         $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
-        Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
+        Write-Host "Downloading from: $url"
+        if (-not (Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -PassThru)) {
+          Write-Host "Error: Failed to download PowerShell package"
+          exit 1
+        }
         Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
