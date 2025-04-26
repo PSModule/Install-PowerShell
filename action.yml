@@ -144,11 +144,16 @@ runs:
 
         URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
         echo "Downloading from: $URL"
+
+        echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
+
         if ! curl -sSL "$URL" -o "$PKG_NAME"; then
           echo "Error: Failed to download PowerShell package"
           exit 1
         fi
         sudo installer -pkg "$PKG_NAME" -target /
+
+        echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
 
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
@@ -194,8 +199,13 @@ runs:
         $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
         $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
         Write-Host "Downloading from: $url"
+
+        Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)]..."
+
         if (-not (Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -PassThru)) {
           Write-Host "Error: Failed to download PowerShell package"
           exit 1
         }
         Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
+
+        Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now available."
