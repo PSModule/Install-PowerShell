@@ -204,23 +204,6 @@ runs:
           exit 0
         }
 
-        # Check if we need to handle a downgrade scenario
-        $isDowngrade = $false
-        if ($detected -and $detected -ne $env:REQUESTED_VERSION) {
-          try {
-            $detectedVersion = [version]$detected
-            $requestedVersion = [version]$env:REQUESTED_VERSION
-            if ($detectedVersion -gt $requestedVersion) {
-              Write-Host "Downgrade detected: $detected → $($env:REQUESTED_VERSION)"
-              $isDowngrade = $true
-            } else {
-              Write-Host "Upgrade detected: $detected → $($env:REQUESTED_VERSION)"
-            }
-          } catch {
-            Write-Host "Warning: Could not compare versions, proceeding with installation"
-          }
-        }
-
         $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
         $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
         Write-Host "Downloading from: $url"
@@ -231,14 +214,6 @@ runs:
         }
 
         Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)]..."
-
-        if ($isDowngrade) {
-          # For downgrades, use force reinstall to overwrite the existing version
-          Write-Host "Using force reinstall for downgrade scenario..."
-          Start-Process msiexec.exe -ArgumentList '/f', $msi, '/quiet', '/norestart' -Wait
-        } else {
-          # For upgrades or fresh installs, use regular install
-          Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
-        }
+        Start-Process msiexec.exe -ArgumentList '/f', $msi, '/quiet', '/norestart' -Wait
 
         Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now available."
