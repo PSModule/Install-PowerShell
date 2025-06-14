@@ -1,6 +1,6 @@
 name: Install PowerShell
 description: |
-  Install a specific version —or the latest stable version— of PowerShell Core
+  Install a specific version, or the latest stable version, of PowerShell Core
   on any GitHub runner (Linux, macOS, Windows).
   Skips the install if the requested version is already present.
 author: PSModule
@@ -29,7 +29,6 @@ runs:
       run: |
         # Install-PowerShell
         set -e
-
         echo "Requested version: [$REQUESTED_VERSION]"
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
@@ -73,30 +72,26 @@ runs:
           URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$DEB_NAME"
-          echo "Starting installation of PowerShell [$REQUESTED_VERSION)]..."
+          echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
           sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
-          echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
         elif command -v rpm >/dev/null; then
           # RHEL/Fedora/CentOS based
           echo "Detected RHEL/Fedora/CentOS based system..."
-
           if [[ "$ARCH" == "aarch64" ]]; then
             RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.${ARCH}.rpm"
           else
             RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.x86_64.rpm"
           fi
-
           URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${RPM_NAME}"
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$RPM_NAME"
-          echo "Starting installation of PowerShell [$REQUESTED_VERSION)]..."
+          echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
           sudo rpm -i "$RPM_NAME" || sudo yum install -y "$RPM_NAME"
-          echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
         else
           echo "Unsupported Linux distribution. Cannot determine package format."
           exit 1
         fi
-        echo "PowerShell [$REQUESTED_VERSION] installed successfully."
+        echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
@@ -108,7 +103,6 @@ runs:
       run: |
         # Install-PowerShell
         set -e
-
         echo "Requested version: [$REQUESTED_VERSION]"
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
@@ -151,7 +145,6 @@ runs:
 
         URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${PKG_NAME}"
         echo "Downloading from: $URL"
-
         echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
 
         if ! curl -sSL "$URL" -o "$PKG_NAME"; then
@@ -159,7 +152,6 @@ runs:
           exit 1
         fi
         sudo installer -pkg "$PKG_NAME" -target /
-
         echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
 
     - name: Install PowerShell (Windows)
@@ -173,7 +165,7 @@ runs:
         # Install-PowerShell
         Write-Host "Requested version: [$env:REQUESTED_VERSION]"
 
-        # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
+        # Resolve 'latest' → concrete version
         $req = $env:REQUESTED_VERSION
         if ($req -and $req.Trim().ToLower() -eq 'latest') {
             $latest = (
@@ -191,12 +183,13 @@ runs:
             exit 1
         }
 
+        # Detect currently installed version (if any)
+        $detected = $null
         try {
           $detected = (pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
           Write-Host "Currently installed PowerShell version: $detected"
         } catch {
           Write-Host "PowerShell is not currently installed"
-          $detected = $null
         }
 
         if ($detected -eq $env:REQUESTED_VERSION) {
@@ -204,11 +197,11 @@ runs:
           exit 0
         }
 
-        # Check if we need to handle a downgrade scenario
+        # Downgrade detection
         $isDowngrade = $false
         if ($detected -and $detected -ne $env:REQUESTED_VERSION) {
           try {
-            $detectedVersion = [version]$detected
+            $detectedVersion  = [version]$detected
             $requestedVersion = [version]$env:REQUESTED_VERSION
             if ($detectedVersion -gt $requestedVersion) {
               Write-Host "Downgrade detected: $detected → $($env:REQUESTED_VERSION)"
@@ -221,47 +214,72 @@ runs:
           }
         }
 
+        # If downgrade → fully uninstall current PowerShell 7
+        if ($isDowngrade) {
+          Write-Host "Uninstalling existing PowerShell version before downgrade..."
+
+          # Search both 64-bit and 32-bit uninstall hives
+          $regPaths = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          )
+
+          $pwshEntries = Get-ItemProperty -Path $regPaths -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Publisher     -eq 'Microsoft Corporation'     -and
+              $_.DisplayName   -like 'PowerShell 7*'           -and
+              $_.DisplayName   -notlike '*Preview*'            -and
+              $_.DisplayVersion -and
+              $_.DisplayVersion.StartsWith($detected)
+            }
+
+          $targetEntry = $pwshEntries | Select-Object -First 1
+          if (-not $targetEntry) {
+            Write-Host "Warning: Could not find an uninstall entry for PowerShell $detected"
+          } else {
+            $uninstallCmd = if ($targetEntry.QuietUninstallString) {
+                              $targetEntry.QuietUninstallString
+                            } else {
+                              $targetEntry.UninstallString
+                            }
+
+            # If the uninstall command is MSI-based and lacks /quiet, add it
+            if ($uninstallCmd -match 'msiexec') {
+              if ($uninstallCmd -notmatch '/quiet')   { $uninstallCmd += ' /quiet' }
+              if ($uninstallCmd -notmatch '/norestart') { $uninstallCmd += ' /norestart' }
+            }
+
+            Write-Host "Running uninstall command:`n$uninstallCmd"
+            $proc = Start-Process 'cmd.exe' -ArgumentList '/c', $uninstallCmd -Wait -PassThru
+            if ($proc.ExitCode -ne 0) {
+              Write-Host "Error: Uninstall failed (exit code $($proc.ExitCode))."
+              exit 1
+            }
+
+            # Double-check removal
+            try {
+              $after = (pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+              if ($after) {
+                Write-Host "Error: PowerShell is still present ($after) after uninstall. Aborting downgrade."
+                exit 1
+              }
+            } catch { }
+          }
+        }
+
+        # Download requested MSI
         $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
         $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
         Write-Host "Downloading from: $url"
 
-        if (-not (Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -PassThru)) {
-          Write-Host "Error: Failed to download PowerShell package"
-          exit 1
-        }
+        $null = Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -ErrorAction Stop
 
+        # Install requested version
         Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)]..."
-
-        if ($isDowngrade) {
-          # For downgrades, uninstall the existing version first, then install the new one
-          Write-Host "Downgrade detected - uninstalling existing PowerShell version first..."
-          
-          # Find PowerShell installation to uninstall
-          $uninstallString = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | 
-            Where-Object { $_.DisplayName -like "*PowerShell*" -and $_.Publisher -eq "Microsoft Corporation" } |
-            Select-Object -First 1 -ExpandProperty UninstallString
-            
-          if ($uninstallString) {
-            Write-Host "Found existing PowerShell installation, uninstalling..."
-            # Extract the product code from the uninstall string
-            if ($uninstallString -match '{[0-9A-F-]+}') {
-              $productCode = $matches[0]
-              Write-Host "Uninstalling PowerShell with product code: $productCode"
-              Start-Process msiexec.exe -ArgumentList '/x', $productCode, '/quiet', '/norestart' -Wait
-              Write-Host "Uninstall completed"
-            } else {
-              Write-Host "Warning: Could not extract product code from uninstall string: $uninstallString"
-            }
-          } else {
-            Write-Host "Warning: Could not find PowerShell installation to uninstall"
-          }
-          
-          # Now install the new version
-          Write-Host "Installing PowerShell [$($env:REQUESTED_VERSION)]..."
-          Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
-        } else {
-          # For upgrades or fresh installs, use regular install
-          Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
+        $msiProcess = Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait -PassThru
+        if ($msiProcess.ExitCode -ne 0) {
+          Write-Host "Error: Installation failed (exit code $($msiProcess.ExitCode))."
+          exit 1
         }
 
         Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now available."
