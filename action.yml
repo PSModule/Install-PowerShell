@@ -233,9 +233,32 @@ runs:
         Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)]..."
 
         if ($isDowngrade) {
-          # For downgrades, use force reinstall to overwrite the existing version
-          Write-Host "Using force reinstall for downgrade scenario..."
-          Start-Process msiexec.exe -ArgumentList '/f', $msi, '/quiet', '/norestart', 'REINSTALL=a' -Wait
+          # For downgrades, uninstall the existing version first, then install the new one
+          Write-Host "Downgrade detected - uninstalling existing PowerShell version first..."
+          
+          # Find PowerShell installation to uninstall
+          $uninstallString = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | 
+            Where-Object { $_.DisplayName -like "*PowerShell*" -and $_.Publisher -eq "Microsoft Corporation" } |
+            Select-Object -First 1 -ExpandProperty UninstallString
+            
+          if ($uninstallString) {
+            Write-Host "Found existing PowerShell installation, uninstalling..."
+            # Extract the product code from the uninstall string
+            if ($uninstallString -match '{[0-9A-F-]+}') {
+              $productCode = $matches[0]
+              Write-Host "Uninstalling PowerShell with product code: $productCode"
+              Start-Process msiexec.exe -ArgumentList '/x', $productCode, '/quiet', '/norestart' -Wait
+              Write-Host "Uninstall completed"
+            } else {
+              Write-Host "Warning: Could not extract product code from uninstall string: $uninstallString"
+            }
+          } else {
+            Write-Host "Warning: Could not find PowerShell installation to uninstall"
+          }
+          
+          # Now install the new version
+          Write-Host "Installing PowerShell [$($env:REQUESTED_VERSION)]..."
+          Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
         } else {
           # For upgrades or fresh installs, use regular install
           Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
