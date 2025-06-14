@@ -65,3 +65,42 @@ jobs:
           if ($installed -ne $requested) {
               throw "Failed: expected $requested but got $installed"
           }
+
+  ActionTestDowngrade:
+    runs-on: windows-latest
+    name: 'Windows Downgrade Test - 7.5.0 → 7.4.7'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # First install a higher version (7.5.0)
+      - name: Install PowerShell 7.5.0
+        uses: ./
+        with:
+          Version: 7.5.0
+
+      - name: Verify 7.5.0 is installed
+        shell: pwsh
+        run: |
+          $installed = ($PSVersionTable.PSVersion).ToString()
+          Write-Host "Installed PowerShell version: $installed"
+          if ($installed -ne "7.5.0") {
+              throw "Failed: expected 7.5.0 but got $installed"
+          }
+          Write-Host "7.5.0 installation verified"
+
+      # Now try to downgrade to a lower version (7.4.7)
+      - name: Downgrade to PowerShell 7.4.7
+        uses: ./
+        with:
+          Version: 7.4.7
+
+      - name: Verify 7.4.7 is installed (downgrade test)
+        shell: pwsh
+        run: |
+          $installed = ($PSVersionTable.PSVersion).ToString()
+          Write-Host "Installed PowerShell version: $installed"
+          if ($installed -ne "7.4.7") {
+              throw "Failed: expected 7.4.7 but got $installed (downgrade failed)"
+          }
+          Write-Host "Downgrade test PASSED!"

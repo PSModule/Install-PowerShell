@@ -235,7 +235,7 @@ runs:
         if ($isDowngrade) {
           # For downgrades, use force reinstall to overwrite the existing version
           Write-Host "Using force reinstall for downgrade scenario..."
-          Start-Process msiexec.exe -ArgumentList '/f', $msi, '/quiet', '/norestart' -Wait
+          Start-Process msiexec.exe -ArgumentList '/f', $msi, '/quiet', '/norestart', 'REINSTALL=a' -Wait
         } else {
           # For upgrades or fresh installs, use regular install
           Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait
