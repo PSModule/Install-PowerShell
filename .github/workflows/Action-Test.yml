@@ -27,7 +27,7 @@ jobs:
     name: '${{ matrix.os }} - [${{ matrix.version }}]'
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Action-Test
         uses: ./
