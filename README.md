@@ -27,8 +27,8 @@ jobs:
 
 ## Inputs
 
-| Input   | Required | Default | Description |
-| ------- | -------- | ------- | ----------- |
+| Input | Required | Default | Description |
+| ----- | -------- | ------- | ----------- |
 | `Version` | `false` | `latest` | Desired PowerShell Core version (e.g. `7.4.1`). Use `latest` to install the newest stable release. |
 
 ## Secrets
