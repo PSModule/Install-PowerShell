@@ -11,10 +11,17 @@ branding:
 inputs:
   Version:
     description: |
-      PowerShell version to install (e.g. `7.4.1`).
+      PowerShell version to install (e.g. `7.4.1` or `7.5.0-preview.1`).
       Defaults to install the latest stable release.
+      Use 'latest' for latest stable, or latest preview if Preview is true.
     required: false
     default: 'latest'
+  Preview:
+    description: |
+      Install PowerShell preview build instead of stable.
+      When true and Version is 'latest', installs the latest preview release.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
