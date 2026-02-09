@@ -32,24 +32,39 @@ runs:
       working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        PREVIEW: ${{ inputs.Preview }}
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
+        echo "Preview mode: [$PREVIEW]"
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
-                REQUESTED_VERSION=$(
-                  curl -s -f \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-                    jq -r '.tag_name' | sed 's/^v//'
-                )
-                echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                if [[ "${PREVIEW,,}" == "true" ]]; then
+                    echo "Fetching latest preview release..."
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        https://api.github.com/repos/PowerShell/PowerShell/releases |
+                        jq -r '[.[] | select(.prerelease == true)] | .[0].tag_name' | sed 's/^v//'
+                    )
+                    echo "Latest preview PowerShell release detected: $REQUESTED_VERSION"
+                else
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                        jq -r '.tag_name' | sed 's/^v//'
+                    )
+                    echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                fi
                 ;;
             "")
                 echo "Error: Version input is required (or use 'latest')"
@@ -106,24 +121,39 @@ runs:
       working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        PREVIEW: ${{ inputs.Preview }}
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
+        echo "Preview mode: [$PREVIEW]"
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
-                REQUESTED_VERSION=$(
-                  curl -s -f \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-                    jq -r '.tag_name' | sed 's/^v//'
-                )
-                echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                if [[ "${PREVIEW,,}" == "true" ]]; then
+                    echo "Fetching latest preview release..."
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        https://api.github.com/repos/PowerShell/PowerShell/releases |
+                        jq -r '[.[] | select(.prerelease == true)] | .[0].tag_name' | sed 's/^v//'
+                    )
+                    echo "Latest preview PowerShell release detected: $REQUESTED_VERSION"
+                else
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                        jq -r '.tag_name' | sed 's/^v//'
+                    )
+                    echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                fi
                 ;;
             "")
                 echo "Error: Version input is required (or use 'latest')"
