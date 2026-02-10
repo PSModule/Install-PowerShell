@@ -72,7 +72,13 @@ jobs:
           }
 
           # Actual version installed by the action
-          $installed = ($PSVersionTable.PSVersion).ToString()
+          # Preview builds install the executable named 'pwsh-preview' on Windows,
+          # so query that binary
+          if ('${{ matrix.version }}'.Trim().ToLower() -eq 'preview' -and $IsWindows) {
+              $installed = (pwsh-preview -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+          } else {
+              $installed = ($PSVersionTable.PSVersion).ToString()
+          }
           Write-Host "Installed PowerShell version: $installed"
           Write-Host "Expected  PowerShell version: $requested"
 
