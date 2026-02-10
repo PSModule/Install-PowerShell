@@ -71,14 +71,32 @@ jobs:
               Write-Host "Resolved 'latest' → $requested"
           }
 
-          # Actual version installed by the action
-          # Preview builds install the executable named 'pwsh-preview' on Windows,
-          # so query that binary
-          if ('${{ matrix.version }}'.Trim().ToLower() -eq 'preview' -and $IsWindows) {
-              $installed = (pwsh-preview -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+          # Parse the major version from the requested version string
+          $majorVersion = $requested -replace '-.*$', '' | ForEach-Object { ($_ -split '\.')[0] }
+          Write-Host "Detected major version: $majorVersion"
+
+          # Determine the installation directory based on preview vs stable
+          $isPreview = '${{ matrix.version }}'.Trim().ToLower() -eq 'preview' -or $requested -match '-preview\.'
+          if ($isPreview) {
+              $installDir = "$majorVersion-preview"
           } else {
-              $installed = ($PSVersionTable.PSVersion).ToString()
+              $installDir = "$majorVersion"
           }
+
+          $pwshPath = "$env:ProgramFiles\PowerShell\$installDir\pwsh.exe"
+          Write-Host "Expected pwsh location: $pwshPath"
+
+          # Verify the file exists
+          if (-not (Test-Path $pwshPath)) {
+              Write-Host "ERROR: PowerShell executable not found at expected path: $pwshPath"
+              Write-Host "`nSearching for all pwsh.exe installations..."
+              Get-ChildItem "$env:ProgramFiles\PowerShell" -Recurse -Filter "pwsh.exe" -ErrorAction SilentlyContinue | 
+                ForEach-Object { Write-Host "  Found: $($_.FullName)" }
+              throw "PowerShell executable not found at: $pwshPath"
+          }
+
+          # Get the version from the installed executable
+          $installed = (& $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
           Write-Host "Installed PowerShell version: $installed"
           Write-Host "Expected  PowerShell version: $requested"
 
