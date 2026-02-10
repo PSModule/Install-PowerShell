@@ -43,7 +43,7 @@ runs:
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
-                if [[ "${PREVIEW,,}" == "true" ]]; then
+                if [[ "$(echo "$PREVIEW" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
                     echo "Fetching latest preview release..."
                     REQUESTED_VERSION=$(
                       curl -s -f \
@@ -132,7 +132,7 @@ runs:
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
-                if [[ "${PREVIEW,,}" == "true" ]]; then
+                if [[ "$(echo "$PREVIEW" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
                     echo "Fetching latest preview release..."
                     REQUESTED_VERSION=$(
                       curl -s -f \
