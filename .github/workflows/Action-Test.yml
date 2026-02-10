@@ -71,32 +71,15 @@ jobs:
               Write-Host "Resolved 'latest' → $requested"
           }
 
-          # Parse the major version from the requested version string
-          $majorVersion = $requested -replace '-.*$', '' | ForEach-Object { ($_ -split '\.')[0] }
-          Write-Host "Detected major version: $majorVersion"
-
-          # Determine the installation directory based on preview vs stable
-          $isPreview = '${{ matrix.version }}'.Trim().ToLower() -eq 'preview' -or $requested -match '-preview\.'
-          if ($isPreview) {
-              $installDir = "$majorVersion-preview"
+          # Actual version installed by the action
+          if ($IsWindows) {
+              $majorVersion = ($requested -split '[\.-]')[0]
+              $installDir = if ($requested -match 'preview') { "$majorVersion-preview" } else { $majorVersion }
+              $installed = (& "$env:ProgramFiles\PowerShell\$installDir\pwsh.exe" -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
           } else {
-              $installDir = "$majorVersion"
+              $installed = (pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
           }
 
-          $pwshPath = "$env:ProgramFiles\PowerShell\$installDir\pwsh.exe"
-          Write-Host "Expected pwsh location: $pwshPath"
-
-          # Verify the file exists
-          if (-not (Test-Path $pwshPath)) {
-              Write-Host "ERROR: PowerShell executable not found at expected path: $pwshPath"
-              Write-Host "`nSearching for all pwsh.exe installations..."
-              Get-ChildItem "$env:ProgramFiles\PowerShell" -Recurse -Filter "pwsh.exe" -ErrorAction SilentlyContinue | 
-                ForEach-Object { Write-Host "  Found: $($_.FullName)" }
-              throw "PowerShell executable not found at: $pwshPath"
-          }
-
-          # Get the version from the installed executable
-          $installed = (& $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
           Write-Host "Installed PowerShell version: $installed"
           Write-Host "Expected  PowerShell version: $requested"
 
