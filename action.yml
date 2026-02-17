@@ -11,9 +11,9 @@ branding:
 inputs:
   Version:
     description: |
-      PowerShell version to install (e.g. `7.4.1` or `7.6.0-preview.6`).
+      PowerShell version to install (e.g. `7.4.1` or `7.4.0-preview.5`).
       Defaults to install the latest stable release.
-      Prerelease versions are supported (e.g. `7.6.0-preview.6`, `7.5.0-rc.1`).
+      Prerelease versions are supported (e.g. `7.4.0-preview.5`, `7.5.0-rc.1`).
     required: false
     default: 'latest'
   Prerelease:
