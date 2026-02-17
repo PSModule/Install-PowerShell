@@ -120,9 +120,16 @@ runs:
           # Debian/Ubuntu based
           echo "Detected Debian/Ubuntu based system..."
           if [[ "$IS_PRERELEASE" == "true" ]]; then
-            # For prerelease versions, select the powershell-preview package
+            # Prerelease .deb naming varies across releases:
+            #   Older: powershell-preview_7.4.0-preview.5-1.deb_amd64.deb
+            #   Newer: powershell_7.6.0-preview.6-1.deb_amd64.deb
+            # Try powershell-preview_ first, then fall back to powershell_
             URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
               '[.assets[] | select(.name | test("^powershell-preview_.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+            if [[ -z "$URL" ]]; then
+              URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+                '[.assets[] | select(.name | test("^powershell_.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+            fi
           else
             # For stable versions, select the powershell package (not powershell-lts or powershell-preview)
             URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
@@ -147,8 +154,16 @@ runs:
           # RHEL/Fedora/CentOS based
           echo "Detected RHEL/Fedora/CentOS based system..."
           if [[ "$IS_PRERELEASE" == "true" ]]; then
+            # Prerelease .rpm naming varies across releases:
+            #   Older: powershell-preview-7.4.0_preview.5-1.rh.x86_64.rpm
+            #   Newer: powershell-7.6.0_preview.6-1.rh.x86_64.rpm
+            # Try powershell-preview first, then fall back to powershell-<version>
             URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
               '[.assets[] | select(.name | test("^powershell-preview.*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+            if [[ -z "$URL" ]]; then
+              URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+                '[.assets[] | select(.name | test("^powershell-[0-9].*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+            fi
           else
             URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
               '[.assets[] | select(.name | test("^powershell-[0-9].*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
@@ -172,6 +187,19 @@ runs:
           exit 1
         fi
 
+        # Determine the install directory and add to PATH before verification.
+        # Preview builds install to /opt/microsoft/powershell/<major>-preview/
+        # which is not on the default PATH after removing the old powershell package.
+        MAJOR_VERSION=$(echo "$REQUESTED_VERSION" | cut -d'.' -f1)
+        if [[ "$IS_PRERELEASE" == "true" ]]; then
+          INSTALL_DIR="/opt/microsoft/powershell/${MAJOR_VERSION}-preview"
+        else
+          INSTALL_DIR="/opt/microsoft/powershell/${MAJOR_VERSION}"
+        fi
+        if [[ -d "$INSTALL_DIR" ]]; then
+          export PATH="$INSTALL_DIR:$PATH"
+        fi
+
         # Verify installation succeeded
         INSTALLED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
         if [[ "$INSTALLED_VERSION" != "$REQUESTED_VERSION" ]]; then
@@ -182,17 +210,9 @@ runs:
 
         # For prerelease builds, add the install directory to GITHUB_PATH so subsequent
         # `shell: pwsh` steps resolve to the version we just installed.
-        if [[ "$REQUESTED_VERSION" == *-* ]]; then
-          MAJOR_VERSION=$(echo "$REQUESTED_VERSION" | cut -d'.' -f1)
-          if [[ "$MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
-            INSTALL_DIR="/opt/microsoft/powershell/${MAJOR_VERSION}-preview"
-            if [[ -d "$INSTALL_DIR" ]]; then
-              echo "Adding install directory to GITHUB_PATH: $INSTALL_DIR"
-              echo "$INSTALL_DIR" >> "$GITHUB_PATH"
-            fi
-          else
-            echo "Warning: Computed MAJOR_VERSION ('$MAJOR_VERSION') is invalid; skipping GITHUB_PATH update." >&2
-          fi
+        if [[ "$IS_PRERELEASE" == "true" && -d "$INSTALL_DIR" ]]; then
+          echo "Adding install directory to GITHUB_PATH: $INSTALL_DIR"
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
         fi
 
     - name: Install PowerShell (macOS)
