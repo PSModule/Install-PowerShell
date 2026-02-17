@@ -71,16 +71,19 @@ jobs:
               Write-Host "Resolved 'latest' → $requested"
           }
 
-          # For prerelease versions on Windows, launch the installed pwsh to get the version
-          # because the current shell may not be the version we just installed.
-          $isPrerelease = $requested -match '-'
-          if ($IsWindows -and $isPrerelease) {
+          # On Windows, always verify by launching pwsh from the known install directory.
+          # This avoids relying on PATH resolution, which may still point to the pre-installed
+          # version if the runner's environment hasn't refreshed after the MSI install.
+          if ($IsWindows) {
+              $isPrerelease = $requested -match '-'
               $majorVersion = ($requested -split '[\.-]')[0]
-              $installDir = "$majorVersion-preview"
+              $installDir = if ($isPrerelease) { "$majorVersion-preview" } else { $majorVersion }
               $pwshPath = "$env:ProgramFiles\PowerShell\$installDir\pwsh.exe"
+              Write-Host "Windows: verifying via subprocess at $pwshPath"
               if (Test-Path $pwshPath) {
                   $installed = (& $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
               } else {
+                  Write-Host "Warning: Expected pwsh not found at $pwshPath, falling back to `$PSVersionTable"
                   $installed = ($PSVersionTable.PSVersion).ToString()
               }
           } else {

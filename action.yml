@@ -332,3 +332,19 @@ runs:
         }
 
         Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now available."
+
+        # Add the install directory to GITHUB_PATH so subsequent `shell: pwsh` steps
+        # resolve to the version we just installed — even for preview builds whose
+        # install directory (7-preview) is not on the runner's default PATH.
+        $isPrerelease = $env:REQUESTED_VERSION -match '-'
+        $installDir = if ($isPrerelease) {
+            "$env:ProgramFiles\PowerShell\7-preview"
+        } else {
+            "$env:ProgramFiles\PowerShell\7"
+        }
+        if (Test-Path $installDir) {
+            Write-Host "Adding install directory to GITHUB_PATH: $installDir"
+            Add-Content -Path $env:GITHUB_PATH -Value $installDir
+        } else {
+            Write-Host "Warning: Expected install directory not found: $installDir"
+        }
