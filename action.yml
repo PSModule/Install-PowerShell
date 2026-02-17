@@ -67,6 +67,10 @@ runs:
                         https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
                         jq -r '.tag_name' | sed 's/^v//'
                     )
+                    if [[ -z "$REQUESTED_VERSION" ]]; then
+                        echo "Error: Failed to resolve latest stable PowerShell release from GitHub."
+                        exit 1
+                    fi
                     echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
                 fi
                 ;;
@@ -170,6 +174,10 @@ runs:
                         https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
                         jq -r '.tag_name' | sed 's/^v//'
                     )
+                    if [[ -z "$REQUESTED_VERSION" ]]; then
+                        echo "Error: Failed to resolve latest stable PowerShell release from GitHub."
+                        exit 1
+                    fi
                     echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
                 fi
                 ;;
@@ -252,6 +260,10 @@ runs:
                 Write-Host "Latest prerelease PowerShell version detected: $latest"
             } else {
                 $latest = (Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' -Headers $headers).tag_name.TrimStart('v')
+                if (-not $latest) {
+                    Write-Host "Error: Failed to resolve latest stable PowerShell release from GitHub."
+                    exit 1
+                }
                 Write-Host "Latest stable PowerShell release detected: $latest"
             }
             $env:REQUESTED_VERSION = $latest
