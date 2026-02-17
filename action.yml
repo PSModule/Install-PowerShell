@@ -35,7 +35,7 @@ runs:
         REQUESTED_VERSION: ${{ inputs.Version }}
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ github.token }}
-      run: |
+      run: | # zizmor: ignore[github-env]
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
@@ -138,7 +138,7 @@ runs:
         REQUESTED_VERSION: ${{ inputs.Version }}
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ github.token }}
-      run: |
+      run: | # zizmor: ignore[github-env]
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
@@ -228,7 +228,7 @@ runs:
         REQUESTED_VERSION: ${{ inputs.Version }}
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ github.token }}
-      run: |
+      run: | # zizmor: ignore[github-env]
         # Install-PowerShell
         Write-Host "Requested version: [$env:REQUESTED_VERSION]"
         Write-Host "Prerelease: [$env:PRERELEASE]"
