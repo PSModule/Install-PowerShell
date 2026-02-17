@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        version: ['latest', '7.4.7', '7.5.0']
+        version: ['latest', '7.4.7', '7.5.0', '7.6.0-preview.6']
     runs-on: ${{ matrix.os }}
     name: '${{ matrix.os }} - [${{ matrix.version }}]'
     steps:
@@ -59,8 +59,21 @@ jobs:
               Write-Host "Resolved 'latest' → $requested"
           }
 
-          # Actual version installed by the action
-          $installed = ($PSVersionTable.PSVersion).ToString()
+          # For prerelease versions on Windows, launch the installed pwsh to get the version
+          # because the current shell may not be the version we just installed.
+          $isPrerelease = $requested -match '-'
+          if ($IsWindows -and $isPrerelease) {
+              $majorVersion = ($requested -split '[\.-]')[0]
+              $installDir = "$majorVersion-preview"
+              $pwshPath = "$env:ProgramFiles\PowerShell\$installDir\pwsh.exe"
+              if (Test-Path $pwshPath) {
+                  $installed = (& $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+              } else {
+                  $installed = ($PSVersionTable.PSVersion).ToString()
+              }
+          } else {
+              $installed = ($PSVersionTable.PSVersion).ToString()
+          }
           Write-Host "Installed PowerShell version: $installed"
           Write-Host "Expected  PowerShell version: $requested"
 

@@ -11,8 +11,9 @@ branding:
 inputs:
   Version:
     description: |
-      PowerShell version to install (e.g. `7.4.1`).
+      PowerShell version to install (e.g. `7.4.1` or `7.6.0-preview.6`).
       Defaults to install the latest stable release.
+      Prerelease versions are supported (e.g. `7.6.0-preview.6`, `7.5.0-rc.1`).
     required: false
     default: 'latest'
 
@@ -198,14 +199,20 @@ runs:
         }
 
         # Downgrade detection
+        # Strip prerelease suffix for [version] comparison (e.g. '7.6.0-preview.6' → '7.6.0')
         $isDowngrade = $false
         if ($detected -and $detected -ne $env:REQUESTED_VERSION) {
           try {
-            $detectedVersion  = [version]$detected
-            $requestedVersion = [version]$env:REQUESTED_VERSION
+            $detectedBase  = ($detected -split '-')[0]
+            $requestedBase = ($env:REQUESTED_VERSION -split '-')[0]
+            $detectedVersion  = [version]$detectedBase
+            $requestedVersion = [version]$requestedBase
             if ($detectedVersion -gt $requestedVersion) {
               Write-Host "Downgrade detected: $detected → $($env:REQUESTED_VERSION)"
               $isDowngrade = $true
+            } elseif ($detectedVersion -eq $requestedVersion -and $detected -ne $env:REQUESTED_VERSION) {
+              # Same base version but different prerelease label, treat as a reinstall
+              Write-Host "Version change detected (same base, different label): $detected → $($env:REQUESTED_VERSION)"
             } else {
               Write-Host "Upgrade detected: $detected → $($env:REQUESTED_VERSION)"
             }
@@ -224,13 +231,14 @@ runs:
             'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
           )
 
+          $isDetectedPreview = $detected -match '-preview|\-rc'
           $pwshEntries = Get-ItemProperty -Path $regPaths -ErrorAction SilentlyContinue |
             Where-Object {
               $_.Publisher     -eq 'Microsoft Corporation'     -and
               $_.DisplayName   -like 'PowerShell 7*'           -and
-              $_.DisplayName   -notlike '*Preview*'            -and
+              $(if ($isDetectedPreview) { $_.DisplayName -like '*Preview*' } else { $_.DisplayName -notlike '*Preview*' }) -and
               $_.DisplayVersion -and
-              $_.DisplayVersion.StartsWith($detected)
+              $_.DisplayVersion.StartsWith(($detected -split '-')[0])
             }
 
           $targetEntry = $pwshEntries | Select-Object -First 1

@@ -2,6 +2,7 @@
 
 A cross‑platform GitHub Action that installs a specific **PowerShell Core** version—or the latest stable release—on any GitHub‑hosted runner
 (Linux, macOS, or Windows). The action automatically skips installation when the requested version is already present.
+Prerelease versions (e.g. `7.6.0-preview.6`, `7.5.0-rc.1`) are also supported.
 
 ## Usage
 
@@ -25,11 +26,20 @@ jobs:
           Write-Host "Using PowerShell $($PSVersionTable.PSVersion)"
 ```
 
+### Installing a prerelease version
+
+```yaml
+      - name: Install PowerShell Preview
+        uses: PSModule/install-powershell@v1
+        with:
+          Version: 7.6.0-preview.6
+```
+
 ## Inputs
 
 | Input | Required | Default | Description |
 | ----- | -------- | ------- | ----------- |
-| `Version` | `false` | `latest` | Desired PowerShell Core version (e.g. `7.4.1`). Use `latest` to install the newest stable release. |
+| `Version` | `false` | `latest` | Desired PowerShell Core version (e.g. `7.4.1`, `7.6.0-preview.6`). Use `latest` to install the newest stable release. Prerelease versions are supported. |
 
 ## Secrets
 
@@ -43,7 +53,8 @@ This action does **not** generate any outputs.
 
 * **Version resolution**
   If `Version` is set to `latest` (case‑insensitive), the action queries the GitHub API for the newest stable release tag in the
-  `PowerShell/PowerShell` repository and substitutes that version.
+  `PowerShell/PowerShell` repository and substitutes that version. Prerelease version strings (e.g. `7.6.0-preview.6`) are passed
+  through directly.
 
 * **Skip logic**
   Before installing, the action checks the current runner to see whether the requested version is already available
