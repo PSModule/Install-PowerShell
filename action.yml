@@ -110,11 +110,24 @@ runs:
           exit 1
         fi
 
+        # Determine if the requested version is a prerelease (contains a hyphen, e.g. 7.6.0-preview.6)
+        IS_PRERELEASE=false
+        if [[ "$REQUESTED_VERSION" == *-* ]]; then
+          IS_PRERELEASE=true
+        fi
+
         if command -v apt-get >/dev/null || command -v dpkg >/dev/null; then
           # Debian/Ubuntu based
           echo "Detected Debian/Ubuntu based system..."
-          URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
-            '[.assets[] | select(.name | test("^powershell.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            # For prerelease versions, select the powershell-preview package
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell-preview_.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+          else
+            # For stable versions, select the powershell package (not powershell-lts or powershell-preview)
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell_.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+          fi
           if [[ -z "$URL" ]]; then
             echo "Error: No .deb package found for architecture '$ARCH' in release v${REQUESTED_VERSION}."
             exit 1
@@ -122,13 +135,24 @@ runs:
           DEB_NAME=$(basename "$URL")
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$DEB_NAME"
+
+          # Remove all existing PowerShell packages to avoid dpkg conflicts
+          # (powershell, powershell-lts, and powershell-preview all provide /usr/bin/pwsh)
+          echo "Removing existing PowerShell packages to avoid conflicts..."
+          sudo dpkg --remove powershell powershell-lts powershell-preview 2>/dev/null || true
+
           echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
           sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
         elif command -v rpm >/dev/null; then
           # RHEL/Fedora/CentOS based
           echo "Detected RHEL/Fedora/CentOS based system..."
-          URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
-            '[.assets[] | select(.name | test("^powershell.*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell-preview.*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+          else
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell-[0-9].*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+          fi
           if [[ -z "$URL" ]]; then
             echo "Error: No .rpm package found for architecture '$ARCH' in release v${REQUESTED_VERSION}."
             exit 1
@@ -136,10 +160,22 @@ runs:
           RPM_NAME=$(basename "$URL")
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$RPM_NAME"
+
+          # Remove existing PowerShell packages to avoid conflicts
+          echo "Removing existing PowerShell packages to avoid conflicts..."
+          sudo rpm -e powershell powershell-preview 2>/dev/null || true
+
           echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
           sudo rpm -i "$RPM_NAME" || sudo yum install -y "$RPM_NAME"
         else
           echo "Unsupported Linux distribution. Cannot determine package format."
+          exit 1
+        fi
+
+        # Verify installation succeeded
+        INSTALLED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ "$INSTALLED_VERSION" != "$REQUESTED_VERSION" ]]; then
+          echo "Error: Installation verification failed. Expected $REQUESTED_VERSION but got ${INSTALLED_VERSION:-nothing}."
           exit 1
         fi
         echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
