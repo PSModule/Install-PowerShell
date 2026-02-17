@@ -96,11 +96,30 @@ runs:
         # Determine Linux distribution type
         ARCH=$(dpkg --print-architecture 2>/dev/null || rpm --eval '%{_arch}' 2>/dev/null || echo "x86_64")
 
+        # Query GitHub Releases API for the actual asset URLs to handle naming
+        # convention differences across releases (e.g. powershell-preview_ vs powershell_).
+        RELEASE_JSON=$(
+          curl -s -f \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/PowerShell/PowerShell/releases/tags/v${REQUESTED_VERSION}"
+        )
+        if [[ -z "$RELEASE_JSON" ]]; then
+          echo "Error: Failed to fetch release info for v${REQUESTED_VERSION} from GitHub."
+          exit 1
+        fi
+
         if command -v apt-get >/dev/null || command -v dpkg >/dev/null; then
           # Debian/Ubuntu based
           echo "Detected Debian/Ubuntu based system..."
-          DEB_NAME="powershell_${REQUESTED_VERSION}-1.deb_${ARCH}.deb"
-          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
+          URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+            '[.assets[] | select(.name | test("^powershell.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+          if [[ -z "$URL" ]]; then
+            echo "Error: No .deb package found for architecture '$ARCH' in release v${REQUESTED_VERSION}."
+            exit 1
+          fi
+          DEB_NAME=$(basename "$URL")
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$DEB_NAME"
           echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
@@ -108,12 +127,13 @@ runs:
         elif command -v rpm >/dev/null; then
           # RHEL/Fedora/CentOS based
           echo "Detected RHEL/Fedora/CentOS based system..."
-          if [[ "$ARCH" == "aarch64" ]]; then
-            RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.${ARCH}.rpm"
-          else
-            RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.x86_64.rpm"
+          URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+            '[.assets[] | select(.name | test("^powershell.*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+          if [[ -z "$URL" ]]; then
+            echo "Error: No .rpm package found for architecture '$ARCH' in release v${REQUESTED_VERSION}."
+            exit 1
           fi
-          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${RPM_NAME}"
+          RPM_NAME=$(basename "$URL")
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$RPM_NAME"
           echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
