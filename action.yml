@@ -11,10 +11,18 @@ branding:
 inputs:
   Version:
     description: |
-      PowerShell version to install (e.g. `7.4.1`).
+      PowerShell version to install (e.g. `7.4.1` or `7.4.0-preview.5`).
       Defaults to install the latest stable release.
+      Prerelease versions are supported (e.g. `7.4.0-preview.5`, `7.5.0-rc.1`).
     required: false
     default: 'latest'
+  Prerelease:
+    description: |
+      Install a prerelease version of PowerShell.
+      When `true` and `Version` is `latest`, installs the latest prerelease.
+      Similar to the `-Prerelease` switch on `Install-PSResource`.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -25,24 +33,47 @@ runs:
       working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ github.token }}
-      run: |
+      run:
+        | # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
+        echo "Prerelease: [$PRERELEASE]"
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
-                REQUESTED_VERSION=$(
-                  curl -s -f \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-                    jq -r '.tag_name' | sed 's/^v//'
-                )
-                echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                if [[ "$PRERELEASE" == "true" ]]; then
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' |
+                        jq -r '[.[] | select(.prerelease == true)] | (.[0].tag_name // empty)' | sed 's/^v//'
+                    )
+                    if [[ -z "$REQUESTED_VERSION" ]]; then
+                        echo "Error: No prerelease PowerShell releases found when resolving latest prerelease."
+                        exit 1
+                    fi
+                    echo "Latest prerelease PowerShell version detected: $REQUESTED_VERSION"
+                else
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                        jq -r '.tag_name' | sed 's/^v//'
+                    )
+                    if [[ -z "$REQUESTED_VERSION" ]]; then
+                        echo "Error: Failed to resolve latest stable PowerShell release from GitHub."
+                        exit 1
+                    fi
+                    echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                fi
                 ;;
             "")
                 echo "Error: Version input is required (or use 'latest')"
@@ -65,33 +96,124 @@ runs:
         # Determine Linux distribution type
         ARCH=$(dpkg --print-architecture 2>/dev/null || rpm --eval '%{_arch}' 2>/dev/null || echo "x86_64")
 
+        # Query GitHub Releases API for the actual asset URLs to handle naming
+        # convention differences across releases (e.g. powershell-preview_ vs powershell_).
+        RELEASE_JSON=$(
+          curl -s -f \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/PowerShell/PowerShell/releases/tags/v${REQUESTED_VERSION}"
+        )
+        if [[ -z "$RELEASE_JSON" ]]; then
+          echo "Error: Failed to fetch release info for v${REQUESTED_VERSION} from GitHub."
+          exit 1
+        fi
+
+        # Determine if the requested version is a prerelease (contains a hyphen, e.g. 7.6.0-preview.6)
+        IS_PRERELEASE=false
+        if [[ "$REQUESTED_VERSION" == *-* ]]; then
+          IS_PRERELEASE=true
+        fi
+
         if command -v apt-get >/dev/null || command -v dpkg >/dev/null; then
           # Debian/Ubuntu based
           echo "Detected Debian/Ubuntu based system..."
-          DEB_NAME="powershell_${REQUESTED_VERSION}-1.deb_${ARCH}.deb"
-          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${DEB_NAME}"
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            # Prerelease .deb naming varies across releases:
+            #   Older: powershell-preview_7.4.0-preview.5-1.deb_amd64.deb
+            #   Newer: powershell_7.6.0-preview.6-1.deb_amd64.deb
+            # Try powershell-preview_ first, then fall back to powershell_
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell-preview_.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+            if [[ -z "$URL" ]]; then
+              URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+                '[.assets[] | select(.name | test("^powershell_.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+            fi
+          else
+            # For stable versions, select the powershell package (not powershell-lts or powershell-preview)
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell_.*\\.deb_" + $arch + "\\.deb$"))] | .[0].browser_download_url // empty')
+          fi
+          if [[ -z "$URL" ]]; then
+            echo "Error: No .deb package found for architecture '$ARCH' in release v${REQUESTED_VERSION}."
+            exit 1
+          fi
+          DEB_NAME=$(basename "$URL")
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$DEB_NAME"
+
+          # Remove all existing PowerShell packages to avoid dpkg conflicts
+          # (powershell, powershell-lts, and powershell-preview all provide /usr/bin/pwsh)
+          echo "Removing existing PowerShell packages to avoid conflicts..."
+          sudo dpkg --remove powershell powershell-lts powershell-preview 2>/dev/null || true
+
           echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
           sudo dpkg -i "$DEB_NAME" || sudo apt-get -f install -y
         elif command -v rpm >/dev/null; then
           # RHEL/Fedora/CentOS based
           echo "Detected RHEL/Fedora/CentOS based system..."
-          if [[ "$ARCH" == "aarch64" ]]; then
-            RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.${ARCH}.rpm"
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            # Prerelease .rpm naming varies across releases:
+            #   Older: powershell-preview-7.4.0_preview.5-1.rh.x86_64.rpm
+            #   Newer: powershell-7.6.0_preview.6-1.rh.x86_64.rpm
+            # Try powershell-preview first, then fall back to powershell-<version>
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell-preview.*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+            if [[ -z "$URL" ]]; then
+              URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+                '[.assets[] | select(.name | test("^powershell-[0-9].*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
+            fi
           else
-            RPM_NAME="powershell-${REQUESTED_VERSION}-1.rh.x86_64.rpm"
+            URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "$ARCH" \
+              '[.assets[] | select(.name | test("^powershell-[0-9].*\\.rh\\." + (if $arch == "aarch64" then $arch else "x86_64" end) + "\\.rpm$"))] | .[0].browser_download_url // empty')
           fi
-          URL="https://github.com/PowerShell/PowerShell/releases/download/v${REQUESTED_VERSION}/${RPM_NAME}"
+          if [[ -z "$URL" ]]; then
+            echo "Error: No .rpm package found for architecture '$ARCH' in release v${REQUESTED_VERSION}."
+            exit 1
+          fi
+          RPM_NAME=$(basename "$URL")
           echo "Downloading from: $URL"
           wget -q "$URL" -O "$RPM_NAME"
+
+          # Remove existing PowerShell packages to avoid conflicts
+          echo "Removing existing PowerShell packages to avoid conflicts..."
+          sudo rpm -e powershell powershell-preview 2>/dev/null || true
+
           echo "Starting installation of PowerShell [$REQUESTED_VERSION]..."
           sudo rpm -i "$RPM_NAME" || sudo yum install -y "$RPM_NAME"
         else
           echo "Unsupported Linux distribution. Cannot determine package format."
           exit 1
         fi
+
+        # Determine the install directory and add to PATH before verification.
+        # Preview builds install to /opt/microsoft/powershell/<major>-preview/
+        # which is not on the default PATH after removing the old powershell package.
+        MAJOR_VERSION=$(echo "$REQUESTED_VERSION" | cut -d'.' -f1)
+        if [[ "$IS_PRERELEASE" == "true" ]]; then
+          INSTALL_DIR="/opt/microsoft/powershell/${MAJOR_VERSION}-preview"
+        else
+          INSTALL_DIR="/opt/microsoft/powershell/${MAJOR_VERSION}"
+        fi
+        if [[ -d "$INSTALL_DIR" ]]; then
+          export PATH="$INSTALL_DIR:$PATH"
+        fi
+
+        # Verify installation succeeded
+        INSTALLED_VERSION=$(pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null || true)
+        if [[ "$INSTALLED_VERSION" != "$REQUESTED_VERSION" ]]; then
+          echo "Error: Installation verification failed. Expected $REQUESTED_VERSION but got ${INSTALLED_VERSION:-nothing}."
+          exit 1
+        fi
         echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
+
+        # For prerelease builds, add the install directory to GITHUB_PATH so subsequent
+        # `shell: pwsh` steps resolve to the version we just installed.
+        if [[ "$IS_PRERELEASE" == "true" && -d "$INSTALL_DIR" ]]; then
+          echo "Adding install directory to GITHUB_PATH: $INSTALL_DIR"
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+        fi
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
@@ -99,24 +221,47 @@ runs:
       working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ github.token }}
-      run: |
+      run:
+        | # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
+        echo "Prerelease: [$PRERELEASE]"
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
             [Ll][Aa][Tt][Ee][Ss][Tt])
-                REQUESTED_VERSION=$(
-                  curl -s -f \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
-                    jq -r '.tag_name' | sed 's/^v//'
-                )
-                echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                if [[ "$PRERELEASE" == "true" ]]; then
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' |
+                        jq -r '[.[] | select(.prerelease == true)] | (.[0].tag_name // empty)' | sed 's/^v//'
+                    )
+                    if [[ -z "$REQUESTED_VERSION" ]]; then
+                        echo "Error: No prerelease PowerShell releases found when resolving latest prerelease."
+                        exit 1
+                    fi
+                    echo "Latest prerelease PowerShell version detected: $REQUESTED_VERSION"
+                else
+                    REQUESTED_VERSION=$(
+                      curl -s -f \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        -H "X-GitHub-Api-Version: 2022-11-28" \
+                        https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
+                        jq -r '.tag_name' | sed 's/^v//'
+                    )
+                    if [[ -z "$REQUESTED_VERSION" ]]; then
+                        echo "Error: Failed to resolve latest stable PowerShell release from GitHub."
+                        exit 1
+                    fi
+                    echo "Latest stable PowerShell release detected: $REQUESTED_VERSION"
+                fi
                 ;;
             "")
                 echo "Error: Version input is required (or use 'latest')"
@@ -154,29 +299,60 @@ runs:
         sudo installer -pkg "$PKG_NAME" -target /
         echo "Installation complete. PowerShell [$REQUESTED_VERSION] is now available."
 
+        # For prerelease builds, add the install directory to GITHUB_PATH so subsequent
+        # `shell: pwsh` steps resolve to the version we just installed.
+        if [[ "$REQUESTED_VERSION" == *-* ]]; then
+          MAJOR_VERSION=$(echo "$REQUESTED_VERSION" | cut -d'.' -f1)
+          if [[ "$MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
+            INSTALL_DIR="/usr/local/microsoft/powershell/${MAJOR_VERSION}-preview"
+            if [[ -d "$INSTALL_DIR" ]]; then
+              echo "Adding install directory to GITHUB_PATH: $INSTALL_DIR"
+              echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+            fi
+          else
+            echo "Warning: Computed MAJOR_VERSION ('$MAJOR_VERSION') is invalid; skipping GITHUB_PATH update." >&2
+          fi
+        fi
+
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
       shell: powershell
       working-directory: ${{ github.action_path }}
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
+        PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ github.token }}
-      run: |
+      run:
+        | # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
         # Install-PowerShell
         Write-Host "Requested version: [$env:REQUESTED_VERSION]"
+        Write-Host "Prerelease: [$env:PRERELEASE]"
 
         # Resolve 'latest' → concrete version
         $req = $env:REQUESTED_VERSION
         if ($req -and $req.Trim().ToLower() -eq 'latest') {
-            $latest = (
-              Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
-              -Headers @{
-                'Accept' = 'application/vnd.github+json'
-                'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
+            $headers = @{
+                'Accept'               = 'application/vnd.github+json'
+                'Authorization'        = "Bearer $($env:GITHUB_TOKEN)"
                 'X-GitHub-Api-Version' = '2022-11-28'
-              }
-            ).tag_name.TrimStart('v')
-            Write-Host "Latest stable PowerShell release detected: $latest"
+            }
+            if ($env:PRERELEASE -eq 'true') {
+                $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' -Headers $headers
+                $latestRelease = $releases | Where-Object { $_.prerelease -eq $true } | Select-Object -First 1
+                if (-not $latestRelease) {
+                    Write-Host "Error: No prerelease PowerShell releases are available from GitHub."
+                    exit 1
+                }
+                $latest = $latestRelease.tag_name.TrimStart('v')
+                Write-Host "Latest prerelease PowerShell version detected: $latest"
+            } else {
+                $latest = (Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' -Headers $headers).tag_name.TrimStart('v')
+                if (-not $latest) {
+                    Write-Host "Error: Failed to resolve latest stable PowerShell release from GitHub."
+                    exit 1
+                }
+                Write-Host "Latest stable PowerShell release detected: $latest"
+            }
             $env:REQUESTED_VERSION = $latest
         } elseif ([string]::IsNullOrWhiteSpace($req)) {
             Write-Host "Error: Version input is required (or use 'latest')"
@@ -198,13 +374,21 @@ runs:
         }
 
         # Downgrade detection
+        # Strip prerelease suffix for [version] comparison (e.g. '7.6.0-preview.6' → '7.6.0')
         $isDowngrade = $false
         if ($detected -and $detected -ne $env:REQUESTED_VERSION) {
           try {
-            $detectedVersion  = [version]$detected
-            $requestedVersion = [version]$env:REQUESTED_VERSION
+            $detectedBase  = ($detected -split '-')[0]
+            $requestedBase = ($env:REQUESTED_VERSION -split '-')[0]
+            $detectedVersion  = [version]$detectedBase
+            $requestedVersion = [version]$requestedBase
             if ($detectedVersion -gt $requestedVersion) {
               Write-Host "Downgrade detected: $detected → $($env:REQUESTED_VERSION)"
+              $isDowngrade = $true
+            } elseif ($detectedVersion -eq $requestedVersion -and $detected -ne $env:REQUESTED_VERSION) {
+              # Same base version but different prerelease label — MSI installers cannot
+              # handle cross-prerelease changes in-place, so force uninstall first.
+              Write-Host "Prerelease version change detected (same base, different label): $detected → $($env:REQUESTED_VERSION)"
               $isDowngrade = $true
             } else {
               Write-Host "Upgrade detected: $detected → $($env:REQUESTED_VERSION)"
@@ -224,13 +408,14 @@ runs:
             'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
           )
 
+          $isDetectedPreview = $detected -match '-preview|-rc'
           $pwshEntries = Get-ItemProperty -Path $regPaths -ErrorAction SilentlyContinue |
             Where-Object {
               $_.Publisher     -eq 'Microsoft Corporation'     -and
               $_.DisplayName   -like 'PowerShell 7*'           -and
-              $_.DisplayName   -notlike '*Preview*'            -and
+              $(if ($isDetectedPreview) { $_.DisplayName -like '*Preview*' } else { $_.DisplayName -notlike '*Preview*' }) -and
               $_.DisplayVersion -and
-              $_.DisplayVersion.StartsWith($detected)
+              ($_.DisplayVersion -match "^$([regex]::Escape(($detected -split '-')[0]))([.\-]|$)" -or $_.DisplayVersion -eq ($detected -split '-')[0])
             }
 
           $targetEntry = $pwshEntries | Select-Object -First 1
@@ -283,3 +468,24 @@ runs:
         }
 
         Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now available."
+
+        # Add the install directory to GITHUB_PATH so subsequent `shell: pwsh` steps
+        # resolve to the version we just installed — even for preview builds whose
+        # install directory (7-preview) is not on the runner's default PATH.
+        $isPrerelease = $env:REQUESTED_VERSION -match '-'
+        $majorVersion = ($env:REQUESTED_VERSION -split '[.\-]')[0]
+        if ($majorVersion -match '^\d+$') {
+            $installDir = if ($isPrerelease) {
+                "$env:ProgramFiles\PowerShell\$majorVersion-preview"
+            } else {
+                "$env:ProgramFiles\PowerShell\$majorVersion"
+            }
+            if (Test-Path $installDir) {
+                Write-Host "Adding install directory to GITHUB_PATH: $installDir"
+                Add-Content -Path $env:GITHUB_PATH -Value $installDir
+            } else {
+                Write-Host "Warning: Expected install directory not found: $installDir"
+            }
+        } else {
+            Write-Host "Warning: Computed major version ('$majorVersion') is invalid; skipping GITHUB_PATH update."
+        }

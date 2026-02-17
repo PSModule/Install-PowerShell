@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        version: ['latest', '7.4.7', '7.5.0']
+        version: ['latest', 'prerelease', '7.4.7', '7.5.0', '7.4.0-preview.5']
     runs-on: ${{ matrix.os }}
     name: '${{ matrix.os }} - [${{ matrix.version }}]'
     steps:
@@ -34,7 +34,8 @@ jobs:
       - name: Action-Test
         uses: ./
         with:
-          Version: ${{ matrix.version }}
+          Version: ${{ matrix.version == 'prerelease' && 'latest' || matrix.version }}
+          Prerelease: ${{ matrix.version == 'prerelease' && 'true' || 'false' }}
 
       - name: Verify installed version
         shell: pwsh
@@ -44,8 +45,23 @@ jobs:
           # Requested version that came from the matrix
           $requested = '${{ matrix.version }}'
 
+          # When 'prerelease' → resolve to latest prerelease
+          if ($requested.Trim().ToLower() -eq 'prerelease') {
+              $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases' `
+                -Headers @{
+                  'Accept' = 'application/vnd.github+json'
+                  'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
+                  'X-GitHub-Api-Version' = '2022-11-28'
+                }
+              $latestPrerelease = $releases | Where-Object { $_.prerelease -eq $true } | Select-Object -First 1
+              if (-not $latestPrerelease) {
+                  throw "No prerelease releases found for PowerShell/PowerShell."
+              }
+              $requested = $latestPrerelease.tag_name.TrimStart('v')
+              Write-Host "Resolved 'prerelease' → $requested"
+          }
           # When empty / 'null' / 'latest' → resolve to latest stable release
-          if ([string]::IsNullOrWhiteSpace($requested) -or
+          elseif ([string]::IsNullOrWhiteSpace($requested) -or
               $requested.Trim().ToLower() -in @('latest','null')) {
 
               $requested = (
@@ -59,8 +75,24 @@ jobs:
               Write-Host "Resolved 'latest' → $requested"
           }
 
-          # Actual version installed by the action
-          $installed = ($PSVersionTable.PSVersion).ToString()
+          # On Windows, always verify by launching pwsh from the known install directory.
+          # This avoids relying on PATH resolution, which may still point to the pre-installed
+          # version if the runner's environment hasn't refreshed after the MSI install.
+          if ($IsWindows) {
+              $isPrerelease = $requested -match '-'
+              $majorVersion = ($requested -split '[\.-]')[0]
+              $installDir = if ($isPrerelease) { "$majorVersion-preview" } else { $majorVersion }
+              $pwshPath = "$env:ProgramFiles\PowerShell\$installDir\pwsh.exe"
+              Write-Host "Windows: verifying via subprocess at $pwshPath"
+              if (Test-Path $pwshPath) {
+                  $installed = (& $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
+              } else {
+                  Write-Host "Warning: Expected pwsh not found at $pwshPath, falling back to `$PSVersionTable"
+                  $installed = ($PSVersionTable.PSVersion).ToString()
+              }
+          } else {
+              $installed = ($PSVersionTable.PSVersion).ToString()
+          }
           Write-Host "Installed PowerShell version: $installed"
           Write-Host "Expected  PowerShell version: $requested"
 
