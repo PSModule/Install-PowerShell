@@ -35,11 +35,21 @@ jobs:
           Version: 7.6.0-preview.6
 ```
 
+### Installing the latest prerelease
+
+```yaml
+      - name: Install latest PowerShell Preview
+        uses: PSModule/install-powershell@v1
+        with:
+          Prerelease: true
+```
+
 ## Inputs
 
 | Input | Required | Default | Description |
 | ----- | -------- | ------- | ----------- |
-| `Version` | `false` | `latest` | Desired PowerShell Core version (e.g. `7.4.1`, `7.6.0-preview.6`). Use `latest` to install the newest stable release. Prerelease versions are supported. |
+| `Version` | `false` | `latest` | Desired PowerShell Core version (e.g. `7.4.1`, `7.6.0-preview.6`). Use `latest` to install the newest stable release (or newest prerelease when `Prerelease` is `true`). |
+| `Prerelease` | `false` | `false` | Install a prerelease version. When `true` and `Version` is `latest`, resolves to the latest prerelease. Similar to `-Prerelease` on `Install-PSResource`. |
 
 ## Secrets
 
@@ -53,8 +63,8 @@ This action does **not** generate any outputs.
 
 * **Version resolution**
   If `Version` is set to `latest` (case‑insensitive), the action queries the GitHub API for the newest stable release tag in the
-  `PowerShell/PowerShell` repository and substitutes that version. Prerelease version strings (e.g. `7.6.0-preview.6`) are passed
-  through directly.
+  `PowerShell/PowerShell` repository and substitutes that version. When `Prerelease` is `true`, it queries for the latest prerelease
+  instead. Explicit prerelease version strings (e.g. `7.6.0-preview.6`) are passed through directly.
 
 * **Skip logic**
   Before installing, the action checks the current runner to see whether the requested version is already available
