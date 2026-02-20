@@ -44,6 +44,7 @@ jobs:
         run: |
           # Requested version that came from the matrix
           $requested = '${{ matrix.version }}'
+          $isPrereleaseRequest = $requested.Trim().ToLower() -eq 'prerelease'
 
           # When 'prerelease' → resolve to latest prerelease
           if ($requested.Trim().ToLower() -eq 'prerelease') {
@@ -98,4 +99,11 @@ jobs:
 
           if ($installed -ne $requested) {
               throw "Failed: expected $requested but got $installed"
+          }
+
+          if ($isPrereleaseRequest) {
+              if ($installed -notmatch '-preview|-(rc|alpha|beta)\.') {
+                  throw "Failed: expected a prerelease version but got $installed"
+              }
+              Write-Host "Prerelease identifier check passed: $installed"
           }
