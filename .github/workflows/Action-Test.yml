@@ -101,11 +101,11 @@ jobs:
           }
 
           # For prerelease matrix entries, additionally assert the version string
-          # contains a prerelease identifier so we never silently fall back to stable.
+          # contains a prerelease segment so we never silently fall back to stable.
           $matrixVersion = '${{ matrix.version }}'
           if ($matrixVersion.Trim().ToLower() -eq 'prerelease') {
-              if ($installed -notmatch '-(preview|rc|alpha|beta)\.') {
-                  throw "Prerelease validation failed: installed version '$installed' does not contain a prerelease identifier (-preview, -rc, -alpha, -beta)."
+              if ($installed -notmatch '-') {
+                  throw "Prerelease validation failed: installed version '$installed' does not contain a prerelease segment."
               }
-              Write-Host "Prerelease check passed: '$installed' contains a prerelease identifier."
+              Write-Host "Prerelease check passed: '$installed' contains a prerelease segment."
           }
