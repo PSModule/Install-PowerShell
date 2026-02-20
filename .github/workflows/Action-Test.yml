@@ -99,3 +99,13 @@ jobs:
           if ($installed -ne $requested) {
               throw "Failed: expected $requested but got $installed"
           }
+
+          # For prerelease matrix entries, additionally assert the version string
+          # contains a prerelease segment so we never silently fall back to stable.
+          $matrixVersion = '${{ matrix.version }}'
+          if ($matrixVersion.Trim().ToLower() -eq 'prerelease') {
+              if ($installed -notmatch '-') {
+                  throw "Prerelease validation failed: installed version '$installed' does not contain a prerelease segment."
+              }
+              Write-Host "Prerelease check passed: '$installed' contains a prerelease segment."
+          }
