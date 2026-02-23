@@ -23,6 +23,13 @@ inputs:
       Similar to the `-Prerelease` switch on `Install-PSResource`.
     required: false
     default: 'false'
+  Token:
+    description: |
+      GitHub token used for GitHub API calls (e.g. resolving `latest` version).
+      Defaults to the built-in `github.token`. Pass a custom PAT to avoid rate
+      limits, or an empty string (`''`) to make fully unauthenticated API calls.
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: composite
@@ -34,13 +41,19 @@ runs:
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         PRERELEASE: ${{ inputs.Prerelease }}
-        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ inputs.Token }}
       run:
         | # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
         echo "Prerelease: [$PRERELEASE]"
+
+        # Build auth header conditionally — omit when GITHUB_TOKEN is empty (anonymous access)
+        AUTH_HEADER=()
+        if [[ -n "$GITHUB_TOKEN" ]]; then
+          AUTH_HEADER=(-H "Authorization: Bearer $GITHUB_TOKEN")
+        fi
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
@@ -49,7 +62,7 @@ runs:
                     REQUESTED_VERSION=$(
                       curl -s -f \
                         -H "Accept: application/vnd.github+json" \
-                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        "${AUTH_HEADER[@]}" \
                         -H "X-GitHub-Api-Version: 2022-11-28" \
                         'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' |
                         jq -r '[.[] | select(.prerelease == true)] | (.[0].tag_name // empty)' | sed 's/^v//'
@@ -63,7 +76,7 @@ runs:
                     REQUESTED_VERSION=$(
                       curl -s -f \
                         -H "Accept: application/vnd.github+json" \
-                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        "${AUTH_HEADER[@]}" \
                         -H "X-GitHub-Api-Version: 2022-11-28" \
                         https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
                         jq -r '.tag_name' | sed 's/^v//'
@@ -101,7 +114,7 @@ runs:
         RELEASE_JSON=$(
           curl -s -f \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "${AUTH_HEADER[@]}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/PowerShell/PowerShell/releases/tags/v${REQUESTED_VERSION}"
         )
@@ -222,13 +235,19 @@ runs:
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         PRERELEASE: ${{ inputs.Prerelease }}
-        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ inputs.Token }}
       run:
         | # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
         # Install-PowerShell
         set -e
         echo "Requested version: [$REQUESTED_VERSION]"
         echo "Prerelease: [$PRERELEASE]"
+
+        # Build auth header conditionally — omit when GITHUB_TOKEN is empty (anonymous access)
+        AUTH_HEADER=()
+        if [[ -n "$GITHUB_TOKEN" ]]; then
+          AUTH_HEADER=(-H "Authorization: Bearer $GITHUB_TOKEN")
+        fi
 
         # Only resolve to latest version if explicitly set to 'latest' (case-insensitive)
         case "${REQUESTED_VERSION:-}" in
@@ -237,7 +256,7 @@ runs:
                     REQUESTED_VERSION=$(
                       curl -s -f \
                         -H "Accept: application/vnd.github+json" \
-                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        "${AUTH_HEADER[@]}" \
                         -H "X-GitHub-Api-Version: 2022-11-28" \
                         'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' |
                         jq -r '[.[] | select(.prerelease == true)] | (.[0].tag_name // empty)' | sed 's/^v//'
@@ -251,7 +270,7 @@ runs:
                     REQUESTED_VERSION=$(
                       curl -s -f \
                         -H "Accept: application/vnd.github+json" \
-                        -H "Authorization: Bearer $GITHUB_TOKEN" \
+                        "${AUTH_HEADER[@]}" \
                         -H "X-GitHub-Api-Version: 2022-11-28" \
                         https://api.github.com/repos/PowerShell/PowerShell/releases/latest |
                         jq -r '.tag_name' | sed 's/^v//'
@@ -321,7 +340,7 @@ runs:
       env:
         REQUESTED_VERSION: ${{ inputs.Version }}
         PRERELEASE: ${{ inputs.Prerelease }}
-        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ inputs.Token }}
       run:
         | # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
         # Install-PowerShell
@@ -333,8 +352,10 @@ runs:
         if ($req -and $req.Trim().ToLower() -eq 'latest') {
             $headers = @{
                 'Accept'               = 'application/vnd.github+json'
-                'Authorization'        = "Bearer $($env:GITHUB_TOKEN)"
                 'X-GitHub-Api-Version' = '2022-11-28'
+            }
+            if ($env:GITHUB_TOKEN) {
+                $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)"
             }
             if ($env:PRERELEASE -eq 'true') {
                 $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' -Headers $headers
