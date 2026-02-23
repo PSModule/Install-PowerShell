@@ -109,3 +109,31 @@ jobs:
               }
               Write-Host "Prerelease check passed: '$installed' contains a prerelease segment."
           }
+
+  ActionTestAnonymous:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+    runs-on: ${{ matrix.os }}
+    name: '${{ matrix.os }} - [anonymous]'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Action-Test (anonymous)
+        uses: ./
+        with:
+          Token: ''
+
+      - name: Verify installed version
+        shell: pwsh
+        run: |
+          $installed = ($PSVersionTable.PSVersion).ToString()
+          Write-Host "Installed PowerShell version: $installed"
+          if ([string]::IsNullOrWhiteSpace($installed)) {
+              throw "Failed: PowerShell version could not be determined after anonymous install."
+          }
+          Write-Host "Anonymous install succeeded with version: $installed"

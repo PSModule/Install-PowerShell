@@ -44,16 +44,36 @@ jobs:
           Prerelease: true
 ```
 
+### Using a custom token or anonymous API access
+
+```yaml
+      # Use a custom PAT to avoid rate limits
+      - name: Install PowerShell (custom token)
+        uses: PSModule/install-powershell@v1
+        with:
+          Token: ${{ secrets.MY_GITHUB_PAT }}
+
+      # Use anonymous (unauthenticated) API access
+      - name: Install PowerShell (anonymous)
+        uses: PSModule/install-powershell@v1
+        with:
+          Token: ''
+```
+
 ## Inputs
 
 | Input | Required | Default | Description |
 | ----- | -------- | ------- | ----------- |
 | `Version` | `false` | `latest` | Desired PowerShell Core version (e.g. `7.4.1`, `7.6.0-preview.6`). Use `latest` to install the newest stable release (or newest prerelease when `Prerelease` is `true`). |
 | `Prerelease` | `false` | `false` | Install a prerelease version. When `true` and `Version` is `latest`, resolves to the latest prerelease. Similar to `-Prerelease` on `Install-PSResource`. |
+| `Token` | `false` | `${{ github.token }}` | GitHub token used for API calls when resolving the `latest` version. Pass a custom PAT to avoid rate limits, or an empty string (`''`) to make fully unauthenticated (anonymous) API calls. |
 
 ## Secrets
 
 This action does **not** require any secrets.
+By default it authenticates to the GitHub API using the built-in `github.token`.
+You can override this by setting the `Token` input to a custom PAT, or to an empty
+string (`''`) for fully unauthenticated (anonymous) API access.
 
 ## Outputs
 
