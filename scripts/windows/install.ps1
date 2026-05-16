@@ -1,4 +1,8 @@
-﻿# Install-PowerShell
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '')]
+param()
+
+# Install-PowerShell
 Write-Host "Requested version: [$env:REQUESTED_VERSION]"
 Write-Host "Prerelease: [$env:PRERELEASE]"
 

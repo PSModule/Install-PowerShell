@@ -41,8 +41,10 @@ jobs:
 
       - name: Verify installed version
         shell: pwsh
+        env:
+          RequestedVersion: ${{ matrix.version }}
         run: |
-          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ matrix.version }}' -GitHubToken '${{ env.TestGitHubToken }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion" -GitHubToken "$env:TestGitHubToken"
 
   ActionTestTokenUseCaseDefault:
     name: 'ubuntu-latest - [Token default behavior]'
@@ -63,8 +65,10 @@ jobs:
 
       - name: Verify default token behavior
         shell: pwsh
+        env:
+          RequestedVersion: ${{ env.TestLatestVersion }}
         run: |
-          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion" -GitHubToken "$env:TestGitHubToken"
 
   ActionTestTokenUseCaseExplicit:
     name: 'ubuntu-latest - [Token explicit input]'
@@ -86,8 +90,10 @@ jobs:
 
       - name: Verify explicit token input behavior
         shell: pwsh
+        env:
+          RequestedVersion: ${{ env.TestLatestVersion }}
         run: |
-          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion" -GitHubToken "$env:TestGitHubToken"
 
   ActionTestTokenUseCaseAnonymous:
     name: 'ubuntu-latest - [Token anonymous mode]'
@@ -108,5 +114,7 @@ jobs:
 
       - name: Verify anonymous mode behavior
         shell: pwsh
+        env:
+          RequestedVersion: ${{ env.TestLatestVersion }}
         run: |
-          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion"

@@ -1,4 +1,6 @@
-﻿[CmdletBinding()]
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
+
+[CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [string] $RequestedVersion,
@@ -7,7 +9,7 @@ param(
     [string] $GitHubToken
 )
 
-function Get-GitHubApiHeaders {
+function Get-GitHubApiHeader {
     [CmdletBinding()]
     param(
         [Parameter()]
@@ -38,7 +40,7 @@ function Resolve-ExpectedVersion {
 
     $resolvedVersion = $Version
     $normalizedVersion = $Version.Trim().ToLower()
-    $headers = Get-GitHubApiHeaders -Token $Token
+    $headers = Get-GitHubApiHeader -Token $Token
 
     if ($normalizedVersion -eq 'prerelease') {
         $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' -Headers $headers
