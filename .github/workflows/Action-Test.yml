@@ -109,3 +109,92 @@ jobs:
               }
               Write-Host "Prerelease check passed: '$installed' contains a prerelease segment."
           }
+
+  ActionTestTokenUseCases:
+    name: 'ubuntu-latest - [Token use cases]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Action-Test (Default token behavior)
+        uses: ./
+        with:
+          Version: latest
+
+      - name: Verify default token behavior
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $expected = (
+            Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
+            -Headers @{
+              'Accept' = 'application/vnd.github+json'
+              'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
+          ).tag_name.TrimStart('v')
+
+          $installed = ($PSVersionTable.PSVersion).ToString()
+          Write-Host "Installed: $installed"
+          Write-Host "Expected : $expected"
+
+          if ($installed -ne $expected) {
+              throw "Default token behavior failed: expected $expected but got $installed"
+          }
+
+      - name: Action-Test (Explicit token input)
+        uses: ./
+        with:
+          Version: latest
+          Token: ${{ github.token }}
+
+      - name: Verify explicit token input behavior
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $expected = (
+            Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
+            -Headers @{
+              'Accept' = 'application/vnd.github+json'
+              'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
+          ).tag_name.TrimStart('v')
+
+          $installed = ($PSVersionTable.PSVersion).ToString()
+          Write-Host "Installed: $installed"
+          Write-Host "Expected : $expected"
+
+          if ($installed -ne $expected) {
+              throw "Explicit token behavior failed: expected $expected but got $installed"
+          }
+
+      - name: Action-Test (Anonymous mode)
+        uses: ./
+        with:
+          Version: latest
+          Token: ''
+
+      - name: Verify anonymous mode behavior
+        shell: pwsh
+        run: |
+          $expected = (
+            Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
+            -Headers @{
+              'Accept' = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
+          ).tag_name.TrimStart('v')
+
+          $installed = ($PSVersionTable.PSVersion).ToString()
+          Write-Host "Installed: $installed"
+          Write-Host "Expected : $expected"
+
+          if ($installed -ne $expected) {
+              throw "Anonymous mode failed: expected $expected but got $installed"
+          }
