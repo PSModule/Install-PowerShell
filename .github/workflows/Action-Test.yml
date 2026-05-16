@@ -25,6 +25,8 @@ jobs:
         version: ['latest', 'prerelease', '7.4.7', '7.5.0', '7.4.0-preview.5']
     runs-on: ${{ matrix.os }}
     name: '${{ matrix.os }} - [${{ matrix.version }}]'
+    env:
+      TestGitHubToken: ${{ github.token }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -40,11 +42,14 @@ jobs:
       - name: Verify installed version
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ matrix.version }}' -GitHubToken '${{ github.token }}'
+          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ matrix.version }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
   ActionTestTokenUseCases:
     name: 'ubuntu-latest - [Token use cases]'
     runs-on: ubuntu-latest
+    env:
+      TestGitHubToken: ${{ github.token }}
+      TestLatestVersion: latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -54,31 +59,31 @@ jobs:
       - name: Action-Test (Default token behavior)
         uses: ./
         with:
-          Version: latest
+          Version: ${{ env.TestLatestVersion }}
 
       - name: Verify default token behavior
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion 'latest' -GitHubToken '${{ github.token }}'
+          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
       - name: Action-Test (Explicit token input)
         uses: ./
         with:
-          Version: latest
-          Token: ${{ github.token }}
+          Version: ${{ env.TestLatestVersion }}
+          Token: ${{ env.TestGitHubToken }}
 
       - name: Verify explicit token input behavior
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion 'latest' -GitHubToken '${{ github.token }}'
+          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
       - name: Action-Test (Anonymous mode)
         uses: ./
         with:
-          Version: latest
+          Version: ${{ env.TestLatestVersion }}
           Token: ''
 
       - name: Verify anonymous mode behavior
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion 'latest'
+          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}'
