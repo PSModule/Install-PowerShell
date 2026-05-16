@@ -9,8 +9,13 @@ param(
     [string] $GitHubToken
 )
 
+<#
+.SYNOPSIS
+Builds GitHub API request headers for optional authenticated requests.
+#>
 function Get-GitHubApiHeader {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param(
         [Parameter()]
         [string] $Token
@@ -28,8 +33,13 @@ function Get-GitHubApiHeader {
     return $headers
 }
 
+<#
+.SYNOPSIS
+Resolves symbolic input values (latest/prerelease) to a concrete PowerShell version.
+#>
 function Resolve-ExpectedVersion {
     [CmdletBinding()]
+    [OutputType([string])]
     param(
         [Parameter(Mandatory)]
         [string] $Version,

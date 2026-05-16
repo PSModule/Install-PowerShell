@@ -147,7 +147,25 @@ $msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
 $url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
 Write-Host "Downloading from: $url"
 
-$null = Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -ErrorAction Stop
+$downloadSucceeded = $false
+$maxAttempts = 3
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    try {
+        $null = Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -ErrorAction Stop
+        $downloadSucceeded = $true
+        break
+    } catch {
+        if ($attempt -eq $maxAttempts) {
+            throw
+        }
+        Write-Host "Warning: Download attempt $attempt failed; retrying..."
+    }
+}
+
+if (-not $downloadSucceeded) {
+    Write-Host 'Error: Failed to download PowerShell package after retry attempts.'
+    exit 1
+}
 
 # Install requested version
 Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)]..."
