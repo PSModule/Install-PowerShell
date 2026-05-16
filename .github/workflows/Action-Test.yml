@@ -44,8 +44,8 @@ jobs:
         run: |
           ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ matrix.version }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
-  ActionTestTokenUseCases:
-    name: 'ubuntu-latest - [Token use cases]'
+  ActionTestTokenUseCaseDefault:
+    name: 'ubuntu-latest - [Token default behavior]'
     runs-on: ubuntu-latest
     env:
       TestGitHubToken: ${{ github.token }}
@@ -66,6 +66,18 @@ jobs:
         run: |
           ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
+  ActionTestTokenUseCaseExplicit:
+    name: 'ubuntu-latest - [Token explicit input]'
+    runs-on: ubuntu-latest
+    env:
+      TestGitHubToken: ${{ github.token }}
+      TestLatestVersion: latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Action-Test (Explicit token input)
         uses: ./
         with:
@@ -76,6 +88,17 @@ jobs:
         shell: pwsh
         run: |
           ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
+
+  ActionTestTokenUseCaseAnonymous:
+    name: 'ubuntu-latest - [Token anonymous mode]'
+    runs-on: ubuntu-latest
+    env:
+      TestLatestVersion: latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Action-Test (Anonymous mode)
         uses: ./
