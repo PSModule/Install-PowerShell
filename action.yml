@@ -36,11 +36,10 @@ inputs:
     required: false
     default: github.com
 
+
+
 runs:
   using: composite
-  defaults:
-    run:
-      working-directory: ${{ github.action_path }}
   env:
     REQUESTED_VERSION: ${{ inputs.Version }}
     PRERELEASE: ${{ inputs.Prerelease }}
@@ -51,14 +50,17 @@ runs:
     - name: Install PowerShell (Linux)
       if: runner.os == 'Linux'
       shell: bash
+      working-directory: ${{ github.action_path }}
       run: bash ./scripts/linux/install.sh
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
       shell: bash
+      working-directory: ${{ github.action_path }}
       run: bash ./scripts/macos/install.sh
 
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
       shell: powershell
+      working-directory: ${{ github.action_path }}
       run: ./scripts/windows/install.ps1
