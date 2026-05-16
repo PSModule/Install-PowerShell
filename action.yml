@@ -40,27 +40,39 @@ inputs:
 
 runs:
   using: composite
-  env:
-    REQUESTED_VERSION: ${{ inputs.Version }}
-    PRERELEASE: ${{ inputs.Prerelease }}
-    GITHUB_TOKEN: ${{ inputs.Token }}
-    GH_TOKEN: ${{ inputs.Token }}
-    GH_HOST: ${{ inputs.Host }}
   steps:
-    - name: Install PowerShell (Linux)
+    - name: Install PowerShell
       if: runner.os == 'Linux'
       shell: bash
       working-directory: ${{ github.action_path }}
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        PRERELEASE: ${{ inputs.Prerelease }}
+        GITHUB_TOKEN: ${{ inputs.Token }}
+        GH_TOKEN: ${{ inputs.Token }}
+        GH_HOST: ${{ inputs.Host }}
       run: bash ./scripts/linux/install.sh
 
-    - name: Install PowerShell (macOS)
+    - name: Install PowerShell
       if: runner.os == 'macOS'
       shell: bash
       working-directory: ${{ github.action_path }}
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        PRERELEASE: ${{ inputs.Prerelease }}
+        GITHUB_TOKEN: ${{ inputs.Token }}
+        GH_TOKEN: ${{ inputs.Token }}
+        GH_HOST: ${{ inputs.Host }}
       run: bash ./scripts/macos/install.sh
 
-    - name: Install PowerShell (Windows)
+    - name: Install PowerShell
       if: runner.os == 'Windows'
       shell: powershell
       working-directory: ${{ github.action_path }}
+      env:
+        REQUESTED_VERSION: ${{ inputs.Version }}
+        PRERELEASE: ${{ inputs.Prerelease }}
+        GITHUB_TOKEN: ${{ inputs.Token }}
+        GH_TOKEN: ${{ inputs.Token }}
+        GH_HOST: ${{ inputs.Host }}
       run: ./scripts/windows/install.ps1
