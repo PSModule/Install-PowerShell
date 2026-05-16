@@ -12,8 +12,13 @@ if ($req -and $req.Trim().ToLower() -eq 'latest') {
     if ($env:GITHUB_TOKEN) {
         $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)"
     }
+    $apiBase = if ($env:GH_HOST -and $env:GH_HOST -ne 'github.com') {
+        "https://$($env:GH_HOST)/api/v3"
+    } else {
+        'https://api.github.com'
+    }
     if ($env:PRERELEASE -eq 'true') {
-        $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases?per_page=100' -Headers $headers
+        $releases = Invoke-RestMethod -Uri "$apiBase/repos/PowerShell/PowerShell/releases?per_page=100" -Headers $headers
         $latestRelease = $releases | Where-Object { $_.prerelease -eq $true } | Select-Object -First 1
         if (-not $latestRelease) {
             Write-Host 'Error: No prerelease PowerShell releases are available from GitHub.'
@@ -22,7 +27,7 @@ if ($req -and $req.Trim().ToLower() -eq 'latest') {
         $latest = $latestRelease.tag_name.TrimStart('v')
         Write-Host "Latest prerelease PowerShell version detected: $latest"
     } else {
-        $latest = (Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' -Headers $headers).tag_name.TrimStart('v')
+        $latest = (Invoke-RestMethod -Uri "$apiBase/repos/PowerShell/PowerShell/releases/latest" -Headers $headers).tag_name.TrimStart('v')
         if (-not $latest) {
             Write-Host 'Error: Failed to resolve latest stable PowerShell release from GitHub.'
             exit 1

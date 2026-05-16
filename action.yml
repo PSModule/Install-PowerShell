@@ -50,6 +50,7 @@ runs:
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ inputs.Token }}
         GH_TOKEN: ${{ inputs.Token }}
+        GH_ENTERPRISE_TOKEN: ${{ inputs.Token }}
         GH_HOST: ${{ inputs.Host }}
       run: bash ./scripts/linux/install.sh
 
@@ -62,6 +63,7 @@ runs:
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ inputs.Token }}
         GH_TOKEN: ${{ inputs.Token }}
+        GH_ENTERPRISE_TOKEN: ${{ inputs.Token }}
         GH_HOST: ${{ inputs.Host }}
       run: bash ./scripts/macos/install.sh
 
@@ -74,5 +76,6 @@ runs:
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ inputs.Token }}
         GH_TOKEN: ${{ inputs.Token }}
+        GH_ENTERPRISE_TOKEN: ${{ inputs.Token }}
         GH_HOST: ${{ inputs.Host }}
       run: ./scripts/windows/install.ps1

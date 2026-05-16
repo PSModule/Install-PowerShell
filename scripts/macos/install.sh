@@ -7,7 +7,7 @@ echo "Prerelease: [$PRERELEASE]"
 
 github_api_get() {
   local endpoint="$1"
-  if command -v gh >/dev/null 2>&1; then
+  if command -v gh >/dev/null 2>&1 && [[ -n "$GH_TOKEN" ]]; then
     local gh_args=()
     if [[ -n "$GH_HOST" ]]; then
       gh_args+=(--hostname "$GH_HOST")
