@@ -42,7 +42,7 @@ jobs:
       - name: Verify installed version
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ matrix.version }}' -GitHubToken '${{ env.TestGitHubToken }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ matrix.version }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
   ActionTestTokenUseCases:
     name: 'ubuntu-latest - [Token use cases]'
@@ -64,7 +64,7 @@ jobs:
       - name: Verify default token behavior
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
       - name: Action-Test (Explicit token input)
         uses: ./
@@ -75,7 +75,7 @@ jobs:
       - name: Verify explicit token input behavior
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}' -GitHubToken '${{ env.TestGitHubToken }}'
 
       - name: Action-Test (Anonymous mode)
         uses: ./
@@ -86,4 +86,4 @@ jobs:
       - name: Verify anonymous mode behavior
         shell: pwsh
         run: |
-          ./test/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion '${{ env.TestLatestVersion }}'
