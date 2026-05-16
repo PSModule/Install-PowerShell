@@ -38,37 +38,27 @@ inputs:
 
 runs:
   using: composite
+  env:
+    REQUESTED_VERSION: ${{ inputs.Version }}
+    PRERELEASE: ${{ inputs.Prerelease }}
+    GITHUB_TOKEN: ${{ inputs.Token }}
+    GH_TOKEN: ${{ inputs.Token }}
+    GH_HOST: ${{ inputs.Host }}
   steps:
     - name: Install PowerShell (Linux)
       if: runner.os == 'Linux'
       shell: bash
       working-directory: ${{ github.action_path }}
-      env:
-        REQUESTED_VERSION: ${{ inputs.Version }}
-        PRERELEASE: ${{ inputs.Prerelease }}
-        GITHUB_TOKEN: ${{ inputs.Token }}
-        GH_TOKEN: ${{ inputs.Token }}
-        GH_HOST: ${{ inputs.Host }}
-      run: bash ./scripts/linux/install.sh # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
+      run: bash ./scripts/linux/install.sh
 
     - name: Install PowerShell (macOS)
       if: runner.os == 'macOS'
       shell: bash
       working-directory: ${{ github.action_path }}
-      env:
-        REQUESTED_VERSION: ${{ inputs.Version }}
-        PRERELEASE: ${{ inputs.Prerelease }}
-        GITHUB_TOKEN: ${{ inputs.Token }}
-        GH_TOKEN: ${{ inputs.Token }}
-        GH_HOST: ${{ inputs.Host }}
-      run: bash ./scripts/macos/install.sh # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
+      run: bash ./scripts/macos/install.sh
 
     - name: Install PowerShell (Windows)
       if: runner.os == 'Windows'
       shell: powershell
       working-directory: ${{ github.action_path }}
-      env:
-        REQUESTED_VERSION: ${{ inputs.Version }}
-        PRERELEASE: ${{ inputs.Prerelease }}
-        GITHUB_TOKEN: ${{ inputs.Token }}
-      run: ./scripts/windows/install.ps1 # zizmor: ignore[github-env] GITHUB_PATH writes use hardcoded install dirs, not user input
+      run: ./scripts/windows/install.ps1
