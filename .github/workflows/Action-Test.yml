@@ -1,6 +1,6 @@
 name: Action-Test
 
-run-name: "Action-Test - [${{ github.event.pull_request.title }} #${{ github.event.pull_request.number }}] by @${{ github.actor }}"
+run-name: 'Action-Test - [${{ github.event.pull_request.title }} #${{ github.event.pull_request.number }}] by @${{ github.actor }}'
 
 on:
   workflow_dispatch:
@@ -25,6 +25,8 @@ jobs:
         version: ['latest', 'prerelease', '7.4.7', '7.5.0', '7.4.0-preview.5']
     runs-on: ${{ matrix.os }}
     name: '${{ matrix.os }} - [${{ matrix.version }}]'
+    env:
+      TestGitHubToken: ${{ github.token }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -40,72 +42,79 @@ jobs:
       - name: Verify installed version
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          RequestedVersion: ${{ matrix.version }}
         run: |
-          # Requested version that came from the matrix
-          $requested = '${{ matrix.version }}'
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion" -GitHubToken "$env:TestGitHubToken"
 
-          # When 'prerelease' → resolve to latest prerelease
-          if ($requested.Trim().ToLower() -eq 'prerelease') {
-              $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases' `
-                -Headers @{
-                  'Accept' = 'application/vnd.github+json'
-                  'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
-                  'X-GitHub-Api-Version' = '2022-11-28'
-                }
-              $latestPrerelease = $releases | Where-Object { $_.prerelease -eq $true } | Select-Object -First 1
-              if (-not $latestPrerelease) {
-                  throw "No prerelease releases found for PowerShell/PowerShell."
-              }
-              $requested = $latestPrerelease.tag_name.TrimStart('v')
-              Write-Host "Resolved 'prerelease' → $requested"
-          }
-          # When empty / 'null' / 'latest' → resolve to latest stable release
-          elseif ([string]::IsNullOrWhiteSpace($requested) -or
-              $requested.Trim().ToLower() -in @('latest','null')) {
+  ActionTestTokenUseCaseDefault:
+    name: 'ubuntu-latest - [Token default behavior]'
+    runs-on: ubuntu-latest
+    env:
+      TestGitHubToken: ${{ github.token }}
+      TestLatestVersion: latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-              $requested = (
-                Invoke-RestMethod -Uri 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest' `
-                -Headers @{
-                  'Accept' = 'application/vnd.github+json'
-                  'Authorization' = "Bearer $($env:GITHUB_TOKEN)"
-                  'X-GitHub-Api-Version' = '2022-11-28'
-                }
-              ).tag_name.TrimStart('v')
-              Write-Host "Resolved 'latest' → $requested"
-          }
+      - name: Action-Test (Default token behavior)
+        uses: ./
+        with:
+          Version: ${{ env.TestLatestVersion }}
 
-          # On Windows, always verify by launching pwsh from the known install directory.
-          # This avoids relying on PATH resolution, which may still point to the pre-installed
-          # version if the runner's environment hasn't refreshed after the MSI install.
-          if ($IsWindows) {
-              $isPrerelease = $requested -match '-'
-              $majorVersion = ($requested -split '[\.-]')[0]
-              $installDir = if ($isPrerelease) { "$majorVersion-preview" } else { $majorVersion }
-              $pwshPath = "$env:ProgramFiles\PowerShell\$installDir\pwsh.exe"
-              Write-Host "Windows: verifying via subprocess at $pwshPath"
-              if (Test-Path $pwshPath) {
-                  $installed = (& $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')
-              } else {
-                  Write-Host "Warning: Expected pwsh not found at $pwshPath, falling back to `$PSVersionTable"
-                  $installed = ($PSVersionTable.PSVersion).ToString()
-              }
-          } else {
-              $installed = ($PSVersionTable.PSVersion).ToString()
-          }
-          Write-Host "Installed PowerShell version: $installed"
-          Write-Host "Expected  PowerShell version: $requested"
+      - name: Verify default token behavior
+        shell: pwsh
+        env:
+          RequestedVersion: ${{ env.TestLatestVersion }}
+        run: |
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion" -GitHubToken "$env:TestGitHubToken"
 
-          if ($installed -ne $requested) {
-              throw "Failed: expected $requested but got $installed"
-          }
+  ActionTestTokenUseCaseExplicit:
+    name: 'ubuntu-latest - [Token explicit input]'
+    runs-on: ubuntu-latest
+    env:
+      TestGitHubToken: ${{ github.token }}
+      TestLatestVersion: latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-          # For prerelease matrix entries, additionally assert the version string
-          # contains a prerelease segment so we never silently fall back to stable.
-          $matrixVersion = '${{ matrix.version }}'
-          if ($matrixVersion.Trim().ToLower() -eq 'prerelease') {
-              if ($installed -notmatch '-') {
-                  throw "Prerelease validation failed: installed version '$installed' does not contain a prerelease segment."
-              }
-              Write-Host "Prerelease check passed: '$installed' contains a prerelease segment."
-          }
+      - name: Action-Test (Explicit token input)
+        uses: ./
+        with:
+          Version: ${{ env.TestLatestVersion }}
+          Token: ${{ env.TestGitHubToken }}
+
+      - name: Verify explicit token input behavior
+        shell: pwsh
+        env:
+          RequestedVersion: ${{ env.TestLatestVersion }}
+        run: |
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion" -GitHubToken "$env:TestGitHubToken"
+
+  ActionTestTokenUseCaseAnonymous:
+    name: 'ubuntu-latest - [Token anonymous mode]'
+    runs-on: ubuntu-latest
+    env:
+      TestLatestVersion: latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Action-Test (Anonymous mode)
+        uses: ./
+        with:
+          Version: ${{ env.TestLatestVersion }}
+          Token: ''
+
+      - name: Verify anonymous mode behavior
+        shell: pwsh
+        env:
+          RequestedVersion: ${{ env.TestLatestVersion }}
+        run: |
+          ./tests/scripts/Verify-InstalledVersion.ps1 -RequestedVersion "$env:RequestedVersion"
