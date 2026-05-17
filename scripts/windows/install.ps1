@@ -6,21 +6,23 @@ param()
 Write-Host "Requested version: [$env:REQUESTED_VERSION]"
 Write-Host "Prerelease: [$env:PRERELEASE]"
 
+# GitHub API headers used throughout the script
+$headers = @{
+    'Accept'               = 'application/vnd.github+json'
+    'X-GitHub-Api-Version' = '2022-11-28'
+}
+if ($env:GITHUB_TOKEN) {
+    $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)"
+}
+$apiBase = if ($env:GH_HOST -and $env:GH_HOST -ne 'github.com') {
+    "https://$($env:GH_HOST)/api/v3"
+} else {
+    'https://api.github.com'
+}
+
 # Resolve 'latest' -> concrete version
 $req = $env:REQUESTED_VERSION
 if ($req -and $req.Trim().ToLower() -eq 'latest') {
-    $headers = @{
-        'Accept'               = 'application/vnd.github+json'
-        'X-GitHub-Api-Version' = '2022-11-28'
-    }
-    if ($env:GITHUB_TOKEN) {
-        $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)"
-    }
-    $apiBase = if ($env:GH_HOST -and $env:GH_HOST -ne 'github.com') {
-        "https://$($env:GH_HOST)/api/v3"
-    } else {
-        'https://api.github.com'
-    }
     if ($env:PRERELEASE -eq 'true') {
         $releases = Invoke-RestMethod -Uri "$apiBase/repos/PowerShell/PowerShell/releases?per_page=100" -Headers $headers
         $latestRelease = $releases | Where-Object { $_.prerelease -eq $true } | Select-Object -First 1
@@ -93,7 +95,7 @@ if ($isDowngrade) {
         'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
     )
 
-    $isDetectedPreview = $detected -match '-preview|-rc'
+    $isDetectedPreview = $detected -match '-'
     $pwshEntries = Get-ItemProperty -Path $regPaths -ErrorAction SilentlyContinue |
         Where-Object {
             $_.Publisher -eq 'Microsoft Corporation' -and
@@ -142,16 +144,37 @@ if ($isDowngrade) {
     }
 }
 
-# Download requested MSI
-$msi = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
-$url = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)/$msi"
+# Determine which package type is available for this release (MSI preferred, ZIP as fallback)
+$msiName = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.msi"
+$zipName = "PowerShell-$($env:REQUESTED_VERSION)-win-x64.zip"
+$baseUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$($env:REQUESTED_VERSION)"
+$useMsi = $true
+
+try {
+    $releaseAssets = (Invoke-RestMethod -Uri "$apiBase/repos/PowerShell/PowerShell/releases/tags/v$($env:REQUESTED_VERSION)" -Headers $headers).assets
+    $assetNames = $releaseAssets | Select-Object -ExpandProperty name
+    if ($assetNames -notcontains $msiName) {
+        if ($assetNames -contains $zipName) {
+            $useMsi = $false
+            Write-Host "Note: No MSI package found for this release; using ZIP instead."
+        } else {
+            Write-Host "Error: No suitable Windows x64 package (MSI or ZIP) found for PowerShell $($env:REQUESTED_VERSION)."
+            exit 1
+        }
+    }
+} catch {
+    Write-Host "Warning: Could not query release assets; assuming MSI package is available."
+}
+
+$pkg = if ($useMsi) { $msiName } else { $zipName }
+$url = "$baseUrl/$pkg"
 Write-Host "Downloading from: $url"
 
 $downloadSucceeded = $false
 $maxAttempts = 3
 for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     try {
-        $null = Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing -ErrorAction Stop
+        $null = Invoke-WebRequest -Uri $url -OutFile $pkg -UseBasicParsing -ErrorAction Stop
         $downloadSucceeded = $true
         break
     } catch {
@@ -167,12 +190,32 @@ if (-not $downloadSucceeded) {
     exit 1
 }
 
-# Install requested version
-Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)]..."
-$msiProcess = Start-Process msiexec.exe -ArgumentList '/i', $msi, '/quiet', '/norestart' -Wait -PassThru
-if ($msiProcess.ExitCode -ne 0) {
-    Write-Host "Error: Installation failed (exit code $($msiProcess.ExitCode))."
+# Compute the install directory (used for both MSI and ZIP installs, and for GITHUB_PATH)
+$isPrerelease = $env:REQUESTED_VERSION -match '-'
+$majorVersion = ($env:REQUESTED_VERSION -split '[.\-]')[0]
+if ($majorVersion -notmatch '^\d+$') {
+    Write-Host "Warning: Computed major version ('$majorVersion') is invalid; skipping installation."
     exit 1
+}
+$installDir = if ($isPrerelease) {
+    "$env:ProgramFiles\PowerShell\$majorVersion-preview"
+} else {
+    "$env:ProgramFiles\PowerShell\$majorVersion"
+}
+
+if ($useMsi) {
+    # Install via MSI
+    Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)] from MSI..."
+    $msiProcess = Start-Process msiexec.exe -ArgumentList '/i', $pkg, '/quiet', '/norestart' -Wait -PassThru
+    if ($msiProcess.ExitCode -ne 0) {
+        Write-Host "Error: Installation failed (exit code $($msiProcess.ExitCode))."
+        exit 1
+    }
+} else {
+    # Install via ZIP extraction
+    Write-Host "Starting installation of PowerShell [$($env:REQUESTED_VERSION)] from ZIP..."
+    $null = New-Item -ItemType Directory -Force -Path $installDir
+    Expand-Archive -Path $pkg -DestinationPath $installDir -Force
 }
 
 Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now available."
@@ -180,20 +223,9 @@ Write-Host "Installation complete. PowerShell [$($env:REQUESTED_VERSION)] is now
 # Add the install directory to GITHUB_PATH so subsequent `shell: pwsh` steps
 # resolve to the version we just installed - even for preview builds whose
 # install directory (7-preview) is not on the runner's default PATH.
-$isPrerelease = $env:REQUESTED_VERSION -match '-'
-$majorVersion = ($env:REQUESTED_VERSION -split '[.\-]')[0]
-if ($majorVersion -match '^\d+$') {
-    $installDir = if ($isPrerelease) {
-        "$env:ProgramFiles\PowerShell\$majorVersion-preview"
-    } else {
-        "$env:ProgramFiles\PowerShell\$majorVersion"
-    }
-    if (Test-Path $installDir) {
-        Write-Host "Adding install directory to GITHUB_PATH: $installDir"
-        Add-Content -Path $env:GITHUB_PATH -Value $installDir
-    } else {
-        Write-Host "Warning: Expected install directory not found: $installDir"
-    }
+if (Test-Path $installDir) {
+    Write-Host "Adding install directory to GITHUB_PATH: $installDir"
+    Add-Content -Path $env:GITHUB_PATH -Value $installDir
 } else {
-    Write-Host "Warning: Computed major version ('$majorVersion') is invalid; skipping GITHUB_PATH update."
+    Write-Host "Warning: Expected install directory not found: $installDir"
 }
