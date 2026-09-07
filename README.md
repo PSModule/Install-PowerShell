@@ -50,14 +50,15 @@ jobs:
 | ----- | -------- | ------- | ----------- |
 | `Version` | `false` | `latest` | Desired PowerShell Core version (e.g. `7.4.1`, `7.6.0-preview.6`). Use `latest` to install the newest stable release (or newest prerelease when `Prerelease` is `true`). |
 | `Prerelease` | `false` | `false` | Install a prerelease version. When `true` and `Version` is `latest`, resolves to the latest prerelease. Similar to `-Prerelease` on `Install-PSResource`. |
-| `Token` | `false` | `${{ github.token }}` | Token used for GitHub API requests. Set to an empty string (`''`) for anonymous API calls. |
-| `Host` | `false` | `github.com` | GitHub host used by the CLI/API path. Keep `github.com` for GitHub.com, or set your GHES hostname. |
+| `Token` | `false` | `${{ github.token }}` on GitHub.com; empty elsewhere | Token used for GitHub API requests to `github.com`. Set to an empty string (`''`) for anonymous API calls. |
+| `Host` | `false` | `github.com` | GitHub API host. Only `github.com` is supported because the action installs assets from the official `PowerShell/PowerShell` repository. |
 
 ## Secrets
 
-This action does **not** require custom secrets by default because it uses `${{ github.token }}`.
+This action does **not** require custom secrets on GitHub.com because it uses `${{ github.token }}`. On GitHub Enterprise Cloud with data residency, it defaults to anonymous access to avoid forwarding that instance's token to `github.com`.
 
-If needed, provide `Token` with a custom PAT. To force anonymous API access, set `Token: ''`.
+If needed, provide `Token` with a custom PAT for `github.com`. To force anonymous API access, set `Token: ''`.
+Release metadata and installation packages are always fetched from the official `PowerShell/PowerShell` repository on `github.com`.
 
 ## Outputs
 

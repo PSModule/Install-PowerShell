@@ -25,18 +25,15 @@ inputs:
     default: 'false'
   Token:
     description: |
-      Token used for GitHub API calls.
-      Defaults to github.token. Set to an empty string for anonymous API access.
+      Token used for GitHub API calls to github.com.
+      Defaults to github.token on GitHub.com. Set to an empty string for anonymous API access.
     required: false
-    default: ${{ github.token }}
+    default: ${{ github.server_url == 'https://github.com' && github.token || '' }}
   Host:
     description: |
-      GitHub host used by gh CLI for API calls.
-      Use github.com for GitHub.com or your GHES hostname.
+      GitHub API host. Only github.com is supported because PowerShell releases are hosted there.
     required: false
     default: github.com
-
-
 
 runs:
   using: composite
@@ -50,7 +47,6 @@ runs:
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ inputs.Token }}
         GH_TOKEN: ${{ inputs.Token }}
-        GH_ENTERPRISE_TOKEN: ${{ inputs.Token }}
         GH_HOST: ${{ inputs.Host }}
       run: bash ./scripts/linux/install.sh
 
@@ -63,7 +59,6 @@ runs:
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ inputs.Token }}
         GH_TOKEN: ${{ inputs.Token }}
-        GH_ENTERPRISE_TOKEN: ${{ inputs.Token }}
         GH_HOST: ${{ inputs.Host }}
       run: bash ./scripts/macos/install.sh
 
@@ -75,7 +70,5 @@ runs:
         REQUESTED_VERSION: ${{ inputs.Version }}
         PRERELEASE: ${{ inputs.Prerelease }}
         GITHUB_TOKEN: ${{ inputs.Token }}
-        GH_TOKEN: ${{ inputs.Token }}
-        GH_ENTERPRISE_TOKEN: ${{ inputs.Token }}
         GH_HOST: ${{ inputs.Host }}
       run: ./scripts/windows/install.ps1

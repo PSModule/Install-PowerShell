@@ -5,6 +5,11 @@ set -e
 echo "Requested version: [$REQUESTED_VERSION]"
 echo "Prerelease: [$PRERELEASE]"
 
+if [[ "$GH_HOST" != "github.com" ]]; then
+	echo "Error: Unsupported GitHub host '$GH_HOST'. PowerShell releases are fetched from github.com." >&2
+	exit 1
+fi
+
 github_api_get() {
 	local endpoint="$1"
 	if command -v gh >/dev/null 2>&1 && [[ -n "$GH_TOKEN" ]]; then
@@ -22,9 +27,6 @@ github_api_get() {
 	fi
 
 	local api_base="https://api.github.com"
-	if [[ -n "$GH_HOST" && "$GH_HOST" != "github.com" ]]; then
-		api_base="https://${GH_HOST}/api/v3"
-	fi
 
 	curl -s -f \
 		-H "Accept: application/vnd.github+json" \
