@@ -6,6 +6,11 @@ param()
 Write-Host "Requested version: [$env:REQUESTED_VERSION]"
 Write-Host "Prerelease: [$env:PRERELEASE]"
 
+if ($env:GH_HOST -ne 'github.com') {
+    Write-Error "Unsupported GitHub host '$env:GH_HOST'. PowerShell releases are fetched from github.com."
+    exit 1
+}
+
 # GitHub API headers used throughout the script
 $headers = @{
     'Accept'               = 'application/vnd.github+json'
@@ -14,11 +19,7 @@ $headers = @{
 if ($env:GITHUB_TOKEN) {
     $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)"
 }
-$apiBase = if ($env:GH_HOST -and $env:GH_HOST -ne 'github.com') {
-    "https://$($env:GH_HOST)/api/v3"
-} else {
-    'https://api.github.com'
-}
+$apiBase = 'https://api.github.com'
 
 # Resolve 'latest' -> concrete version
 $req = $env:REQUESTED_VERSION
